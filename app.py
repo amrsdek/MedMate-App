@@ -11,6 +11,7 @@ import os
 import requests
 import random
 import time
+import threading
 
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
@@ -63,13 +64,23 @@ div.stButton > button {
 .stAlert { direction: rtl; text-align: right; font-weight: bold; }
 
 /* ----------------------------------------------------------- */
-/* 🚫 منطقة الإخفاء القسري (Clean UI) */
+/* 🚫 منطقة الإخفاء القسري (إخفاء الهوية والفوتر) */
 /* ----------------------------------------------------------- */
+
+/* إخفاء القائمة العلوية (3 شرط) */
 #MainMenu {visibility: hidden;}
+
+/* إخفاء الفوتر السفلي تماماً */
 footer {visibility: hidden !important; height: 0px !important;}
+
+/* إخفاء الهيدر العلوي الملون */
 header {visibility: hidden !important;}
+
+/* إخفاء الشريط السفلي (Created by...) باستخدام Wildcard Selector */
 div[class^="viewerBadge"] {display: none !important;}
 div[class*="viewerBadge"] {display: none !important;}
+
+/* إخفاء زر النشر وأدوات المطور */
 .stDeployButton {display:none !important;}
 [data-testid="stToolbar"] {visibility: hidden !important;}
 
@@ -77,7 +88,7 @@ div[class*="viewerBadge"] {display: none !important;}
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# قائمة الأذكار
+# قائمة الأذكار (تظهر أثناء التحميل)
 # ---------------------------------------------------------
 AZKAR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم 🌿",
@@ -174,6 +185,7 @@ def create_styled_word_doc(text_content, user_title):
         
         if not line: continue
         
+        # تنظيف العناوين من #
         if line.startswith('#'):
             clean_text = line.lstrip('#').strip().replace('**', '')
             h = doc.add_heading(clean_text, level=1)
@@ -246,81 +258,82 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-flash-latest')
         full_combined_text = ""
-        
-        # مكان الإشعار العلوي (Top Pop-up)
-        banner_placeholder = st.empty()
-        
         progress_bar = st.progress(0)
+        status_text = st.empty()
         
         try:
             for i, uploaded_file in enumerate(uploaded_files):
-                # ---------------------------------------------------
-                # تحديث الإشعار العلوي الأخضر مع كل ملف
-                # ---------------------------------------------------
-                current_zikr = random.choice(AZKAR_LIST)
-                
-                banner_placeholder.markdown(f"""
-                <div style="
-                    position: fixed; 
-                    top: 0; 
-                    left: 0; 
-                    width: 100%; 
-                    background-color: #d4edda; 
-                    color: #155724; 
-                    padding: 15px; 
-                    text-align: center; 
-                    z-index: 99999; 
-                    border-bottom: 2px solid #c3e6cb; 
-                    box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
-                    font-family: 'Segoe UI', Tahoma, sans-serif;">
-                    <div style="font-weight: bold; font-size: 18px; margin-bottom: 5px;">
-                        ⏳ جاري تحليل الملف ({i+1} من {len(uploaded_files)}).. استغل وقت الانتظار في الاستغفار
-                    </div>
-                    <div style="font-size: 16px; color: #0f5132;">
-                        {current_zikr} 📿
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                # ---------------------------------------------------
-                
-                progress_bar.progress((i) / len(uploaded_files))
-                
                 prompt_type = "Exam / MCQ" if doc_type_selection == "Exam / MCQ" else "Lecture / Notes"
                 prompt = get_medical_prompt(prompt_type, is_handwritten)
                 
-                if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
-                    image_bytes = uploaded_file.getvalue()
-                    response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
-                    full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
-                elif uploaded_file.type == 'application/pdf':
-                    temp_filename = f"temp_{uploaded_file.name}"
-                    with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
-                    uploaded_pdf = genai.upload_file(temp_filename)
-                    # انتظار معالجة PDF
-                    while uploaded_pdf.state.name == "PROCESSING":
-                        time.sleep(1)
-                        uploaded_pdf = genai.get_file(uploaded_pdf.name)
-                    
-                    response = model.generate_content([prompt, uploaded_pdf])
-                    full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
-                    try: os.remove(temp_filename)
-                    except: pass
+                # --- [التصحيح الهام] قراءة الملفات في الخيط الرئيسي ---
+                file_bytes = uploaded_file.getvalue()
+                file_type = uploaded_file.type
+                file_name = uploaded_file.name
                 
-                # تحديث البار بعد الانتهاء من الملف
+                # حاوية للنتيجة
+                thread_result = {"text": None, "error": None}
+
+                # دالة المعالجة الخلفية
+                def process_file_in_background():
+                    try:
+                        if file_type in ['image/png', 'image/jpeg', 'image/jpg']:
+                            # نستخدم البيانات التي قرأناها مسبقاً
+                            response = model.generate_content([prompt, {"mime_type": file_type, "data": file_bytes}])
+                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
+                        
+                        elif file_type == 'application/pdf':
+                            # في حالة PDF نحتاج لحفظ ملف مؤقت
+                            # سنقوم بمعالجة خاصة هنا لتجنب تداخل الملفات
+                            temp_filename = f"temp_{int(time.time())}_{random.randint(1000,9999)}.pdf"
+                            with open(temp_filename, "wb") as f: f.write(file_bytes)
+                            
+                            uploaded_pdf = genai.upload_file(temp_filename)
+                            # انتظار معالجة الملف من جهة جوجل (أحياناً يحتاج ثواني)
+                            while uploaded_pdf.state.name == "PROCESSING":
+                                time.sleep(1)
+                                uploaded_pdf = genai.get_file(uploaded_pdf.name)
+
+                            response = model.generate_content([prompt, uploaded_pdf])
+                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
+                            
+                            # تنظيف
+                            try: os.remove(temp_filename)
+                            except: pass
+                    except Exception as e:
+                        thread_result["error"] = e
+
+                # بدء المعالجة في خيط منفصل
+                t = threading.Thread(target=process_file_in_background)
+                t.start()
+
+                # حلقة تكرارية لتغيير الأذكار
+                while t.is_alive():
+                    current_zikr = random.choice(AZKAR_LIST)
+                    status_text.markdown(f"**جاري تحليل الملف ({i+1}/{len(uploaded_files)}).. {current_zikr}** 📿")
+                    time.sleep(2.5) # زدنا الوقت قليلاً لتقليل الحمل
+
+                # التأكد من انتهاء الخيط
+                t.join()
+
+                # التحقق من النتائج
+                if thread_result["error"]:
+                    raise thread_result["error"]
+                
+                if thread_result["text"]:
+                    full_combined_text += thread_result["text"]
+                
                 progress_bar.progress((i + 1) / len(uploaded_files))
             
-            # إخفاء الإشعار بعد الانتهاء
-            banner_placeholder.empty()
-            
             st.session_state['converted_text'] = full_combined_text
+            status_text.success("✅ Done! الملف جاهز للتحميل بالأسفل.")
             st.balloons()
             
         except Exception as e:
-            banner_placeholder.empty() # إخفاء الإشعار في حالة الخطأ
             st.error(f"خطأ تقني: {e}")
 
 # ---------------------------------------------------------
-# 4. صندوق الملاحظات
+# 4. صندوق الملاحظات (موجود في المنتصف)
 # ---------------------------------------------------------
 st.divider()
 st.markdown("""
