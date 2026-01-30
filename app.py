@@ -17,7 +17,7 @@ import threading
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
 
 # ---------------------------------------------------------
-# CSS للمظهر (RTL + إخفاء كامل لعلامات Streamlit)
+# CSS للمظهر (RTL + إخفاء كامل لعلامات Streamlit - النسخة النووية)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -66,21 +66,11 @@ div.stButton > button {
 /* ----------------------------------------------------------- */
 /* 🚫 منطقة الإخفاء القسري (إخفاء الهوية والفوتر) */
 /* ----------------------------------------------------------- */
-
-/* إخفاء القائمة العلوية (3 شرط) */
 #MainMenu {visibility: hidden;}
-
-/* إخفاء الفوتر السفلي تماماً */
 footer {visibility: hidden !important; height: 0px !important;}
-
-/* إخفاء الهيدر العلوي الملون */
 header {visibility: hidden !important;}
-
-/* إخفاء الشريط السفلي (Created by...) باستخدام Wildcard Selector */
 div[class^="viewerBadge"] {display: none !important;}
 div[class*="viewerBadge"] {display: none !important;}
-
-/* إخفاء زر النشر وأدوات المطور */
 .stDeployButton {display:none !important;}
 [data-testid="stToolbar"] {visibility: hidden !important;}
 
@@ -249,93 +239,11 @@ col_opt1, col_opt2 = st.columns(2)
 with col_opt1: is_handwritten = st.checkbox("✍️ هل الملف بخط اليد؟")
 with col_opt2: user_filename = st.text_input("اسم الملف الناتج:", value="MedMate Note")
 
-# 3. زر التحويل
-if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
-    if not uploaded_files: st.warning("⚠️ الرجاء رفع الملفات أولاً.")
-    elif not api_key: st.error("⚠️ لم يتم العثور على مفتاح API في الإعدادات! يرجى التواصل مع المطور.")
-    elif doc_type_selection is None: st.error("🛑 يجب اختيار نوع المحتوى لضمان جودة الملف.")
-    else:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-flash-latest')
-        full_combined_text = ""
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        try:
-            for i, uploaded_file in enumerate(uploaded_files):
-                prompt_type = "Exam / MCQ" if doc_type_selection == "Exam / MCQ" else "Lecture / Notes"
-                prompt = get_medical_prompt(prompt_type, is_handwritten)
-                
-                # --- [التصحيح الهام] قراءة الملفات في الخيط الرئيسي ---
-                file_bytes = uploaded_file.getvalue()
-                file_type = uploaded_file.type
-                file_name = uploaded_file.name
-                
-                # حاوية للنتيجة
-                thread_result = {"text": None, "error": None}
-
-                # دالة المعالجة الخلفية
-                def process_file_in_background():
-                    try:
-                        if file_type in ['image/png', 'image/jpeg', 'image/jpg']:
-                            # نستخدم البيانات التي قرأناها مسبقاً
-                            response = model.generate_content([prompt, {"mime_type": file_type, "data": file_bytes}])
-                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
-                        
-                        elif file_type == 'application/pdf':
-                            # في حالة PDF نحتاج لحفظ ملف مؤقت
-                            # سنقوم بمعالجة خاصة هنا لتجنب تداخل الملفات
-                            temp_filename = f"temp_{int(time.time())}_{random.randint(1000,9999)}.pdf"
-                            with open(temp_filename, "wb") as f: f.write(file_bytes)
-                            
-                            uploaded_pdf = genai.upload_file(temp_filename)
-                            # انتظار معالجة الملف من جهة جوجل (أحياناً يحتاج ثواني)
-                            while uploaded_pdf.state.name == "PROCESSING":
-                                time.sleep(1)
-                                uploaded_pdf = genai.get_file(uploaded_pdf.name)
-
-                            response = model.generate_content([prompt, uploaded_pdf])
-                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
-                            
-                            # تنظيف
-                            try: os.remove(temp_filename)
-                            except: pass
-                    except Exception as e:
-                        thread_result["error"] = e
-
-                # بدء المعالجة في خيط منفصل
-                t = threading.Thread(target=process_file_in_background)
-                t.start()
-
-                # حلقة تكرارية لتغيير الأذكار
-                while t.is_alive():
-                    current_zikr = random.choice(AZKAR_LIST)
-                    status_text.markdown(f"**جاري تحليل الملف ({i+1}/{len(uploaded_files)}).. {current_zikr}** 📿")
-                    time.sleep(2.5) # زدنا الوقت قليلاً لتقليل الحمل
-
-                # التأكد من انتهاء الخيط
-                t.join()
-
-                # التحقق من النتائج
-                if thread_result["error"]:
-                    raise thread_result["error"]
-                
-                if thread_result["text"]:
-                    full_combined_text += thread_result["text"]
-                
-                progress_bar.progress((i + 1) / len(uploaded_files))
-            
-            st.session_state['converted_text'] = full_combined_text
-            status_text.success("✅ Done! الملف جاهز للتحميل بالأسفل.")
-            st.balloons()
-            
-        except Exception as e:
-            st.error(f"خطأ تقني: {e}")
-
-# ---------------------------------------------------------
-# 4. صندوق الملاحظات (موجود في المنتصف)
-# ---------------------------------------------------------
 st.divider()
+
+# ---------------------------------------------------------
+# 4. صندوق الملاحظات (تم نقله هنا ليكون متاحاً قبل الضغط) 🆕
+# ---------------------------------------------------------
 st.markdown("""
 <div style="text-align: right; direction: rtl; background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
     <h4 style="margin:0;">💌 رسالة ودعوة</h4>
@@ -368,10 +276,88 @@ with st.form(key='feedback_form'):
 
 st.divider()
 
+# 3. زر التحويل
+if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
+    if not uploaded_files: st.warning("⚠️ الرجاء رفع الملفات أولاً.")
+    elif not api_key: st.error("⚠️ لم يتم العثور على مفتاح API في الإعدادات! يرجى التواصل مع المطور.")
+    elif doc_type_selection is None: st.error("🛑 يجب اختيار نوع المحتوى لضمان جودة الملف.")
+    else:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-flash-latest')
+        full_combined_text = ""
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            for i, uploaded_file in enumerate(uploaded_files):
+                prompt_type = "Exam / MCQ" if doc_type_selection == "Exam / MCQ" else "Lecture / Notes"
+                prompt = get_medical_prompt(prompt_type, is_handwritten)
+                
+                # --- [الحل الجذري] قراءة البيانات في المسار الرئيسي لمنع التجمد ---
+                file_bytes = uploaded_file.getvalue()
+                file_type = uploaded_file.type
+                file_name = uploaded_file.name
+                
+                # حاوية للنتيجة
+                thread_result = {"text": None, "error": None}
+
+                # دالة المعالجة الخلفية
+                def process_file_in_background():
+                    try:
+                        if file_type in ['image/png', 'image/jpeg', 'image/jpg']:
+                            # نستخدم البيانات الجاهزة
+                            response = model.generate_content([prompt, {"mime_type": file_type, "data": file_bytes}])
+                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
+                        
+                        elif file_type == 'application/pdf':
+                            temp_filename = f"temp_{int(time.time())}_{random.randint(1000,9999)}.pdf"
+                            with open(temp_filename, "wb") as f: f.write(file_bytes)
+                            
+                            uploaded_pdf = genai.upload_file(temp_filename)
+                            while uploaded_pdf.state.name == "PROCESSING":
+                                time.sleep(1)
+                                uploaded_pdf = genai.get_file(uploaded_pdf.name)
+
+                            response = model.generate_content([prompt, uploaded_pdf])
+                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
+                            try: os.remove(temp_filename)
+                            except: pass
+                    except Exception as e:
+                        thread_result["error"] = e
+
+                # بدء المعالجة في خيط منفصل (Thread)
+                t = threading.Thread(target=process_file_in_background)
+                t.start()
+
+                # حلقة تكرارية لتغيير الأذكار (بدون بوب آب، نص عادي)
+                while t.is_alive():
+                    current_zikr = random.choice(AZKAR_LIST)
+                    # عرض الذكر كنص عادي فوق البروجريس بار
+                    status_text.markdown(f"**جاري تحليل الملف ({i+1}/{len(uploaded_files)}).. {current_zikr}** 📿")
+                    time.sleep(2.5) 
+
+                t.join()
+
+                if thread_result["error"]:
+                    raise thread_result["error"]
+                
+                if thread_result["text"]:
+                    full_combined_text += thread_result["text"]
+                
+                progress_bar.progress((i + 1) / len(uploaded_files))
+            
+            st.session_state['converted_text'] = full_combined_text
+            status_text.success("✅ Done! الملف جاهز للتحميل بالأسفل.")
+            st.balloons()
+            
+        except Exception as e:
+            st.error(f"خطأ تقني: {e}")
+
 # ---------------------------------------------------------
 # 5. عرض النتائج
 # ---------------------------------------------------------
 if st.session_state['converted_text']:
+    st.divider()
     docx_file = create_styled_word_doc(st.session_state['converted_text'], user_filename)
     col_download_area, col_info = st.columns([2, 1])
     with col_download_area:
