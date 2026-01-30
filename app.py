@@ -202,7 +202,7 @@ st.markdown("""
 <h3>حوّل صور المحاضرات لملفات Word في ثوانٍ! ⚡</h3>
 من أخ لأخيه.. طورنا <b>MedMate</b> عشان يكون رفيقك في المشوار.
 <br>
-صور المحاضرة، ارفعها هنا، واستلمها ملف Word منسق وجاهز للمذاكرة فوراً.
+صور المحاضرة، ارفعها هنا، واستلمها ملف Word منسق وجاهز للمذاكرة فورًا.
 <br>
 <small style="color: #666;">* متاح مجاناً لدفعة طب بني سويف.</small>
 </div>
@@ -374,3 +374,4 @@ if st.session_state['converted_text']:
         edited_text = st.text_area("عدل براحتك هنا:", value=st.session_state['converted_text'], height=500, label_visibility="collapsed")
         if edited_text != st.session_state['converted_text']: st.session_state['converted_text'] = edited_text
     with tab2: st.markdown(st.session_state['converted_text'])
+
