@@ -10,6 +10,8 @@ import io
 import os
 import requests
 import random
+import time
+import threading
 
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
@@ -251,29 +253,59 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         
         try:
             for i, uploaded_file in enumerate(uploaded_files):
-                current_zikr = random.choice(AZKAR_LIST)
-                status_text.markdown(f"**جاري تحليل الملف ({i+1}/{len(uploaded_files)}).. {current_zikr}** 📿")
-                
-                progress_bar.progress((i + 1) / len(uploaded_files))
+                # تجهيز متغيرات للتحكم في العملية
                 prompt_type = "Exam / MCQ" if doc_type_selection == "Exam / MCQ" else "Lecture / Notes"
                 prompt = get_medical_prompt(prompt_type, is_handwritten)
                 
-                if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
-                    image_bytes = uploaded_file.getvalue()
-                    response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
-                    full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
-                elif uploaded_file.type == 'application/pdf':
-                    temp_filename = f"temp_{uploaded_file.name}"
-                    with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
-                    uploaded_pdf = genai.upload_file(temp_filename)
-                    response = model.generate_content([prompt, uploaded_pdf])
-                    full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
-                    try: os.remove(temp_filename)
-                    except: pass
+                # حاوية للنتيجة لأن الـ Thread لا يرجع قيمة مباشرة
+                thread_result = {"text": None, "error": None}
+
+                # دالة المعالجة التي ستعمل في الخلفية
+                def process_file_in_background():
+                    try:
+                        if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
+                            image_bytes = uploaded_file.getvalue()
+                            response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
+                            thread_result["text"] = f"\n\nSource: {uploaded_file.name}\n" + response.text
+                        
+                        elif uploaded_file.type == 'application/pdf':
+                            temp_filename = f"temp_{uploaded_file.name}"
+                            with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
+                            uploaded_pdf = genai.upload_file(temp_filename)
+                            response = model.generate_content([prompt, uploaded_pdf])
+                            thread_result["text"] = f"\n\nSource: {uploaded_file.name}\n" + response.text
+                            try: os.remove(temp_filename)
+                            except: pass
+                    except Exception as e:
+                        thread_result["error"] = e
+
+                # بدء المعالجة في خيط منفصل (Thread)
+                t = threading.Thread(target=process_file_in_background)
+                t.start()
+
+                # حلقة تكرارية لتغيير الأذكار أثناء انتظار انتهاء المعالجة
+                while t.is_alive():
+                    current_zikr = random.choice(AZKAR_LIST)
+                    status_text.markdown(f"**جاري تحليل الملف ({i+1}/{len(uploaded_files)}).. {current_zikr}** 📿")
+                    time.sleep(2) # انتظار ثانيتين قبل تغيير الذكر
+
+                # التأكد من انتهاء الخيط
+                t.join()
+
+                # التحقق من النتائج
+                if thread_result["error"]:
+                    raise thread_result["error"]
+                
+                if thread_result["text"]:
+                    full_combined_text += thread_result["text"]
+                
+                # تحديث شريط التقدم بعد انتهاء كل ملف
+                progress_bar.progress((i + 1) / len(uploaded_files))
             
             st.session_state['converted_text'] = full_combined_text
             status_text.success("✅ Done! الملف جاهز للتحميل بالأسفل.")
             st.balloons()
+            
         except Exception as e:
             st.error(f"خطأ تقني: {e}")
 
