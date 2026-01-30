@@ -15,24 +15,69 @@ import random
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
 
 # ---------------------------------------------------------
-# CSS للمظهر (RTL + ألوان MedMate)
+# CSS للمظهر (RTL + تحسينات الواجهة العربية)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
-.stApp { direction: rtl; text-align: right; background-color: #f8f9fa; }
-h1, h2, h3, p, div, .stMarkdown, .caption { text-align: right; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-section[data-testid="stSidebar"] { direction: rtl; text-align: right; }
-.stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] { direction: rtl; text-align: right; }
-.stCheckbox { direction: rtl; text-align: right; }
-div.stButton > button { background-color: #2E86C1; color: white; font-size: 18px; padding: 10px 20px; border-radius: 8px; border: none; width: 100%; margin-top: 20px; font-weight: bold; }
-.stAlert { direction: rtl; text-align: right; font-weight: bold; }
+/* 1. ضبط اتجاه الصفحة بالكامل لليمين */
+.stApp {
+    direction: rtl;
+    text-align: right;
+    background-color: #f8f9fa;
+}
+
+/* 2. ضبط العناوين والنصوص */
+h1, h2, h3, p, div, .stMarkdown, .caption {
+    text-align: right; 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* 3. تعديل القوائم الجانبية (Sidebar) */
+section[data-testid="stSidebar"] {
+    direction: rtl;
+    text-align: right;
+}
+
+/* 4. تعديل مدخلات النصوص والقوائم */
+.stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
+    direction: rtl;
+    text-align: right;
+}
+
+/* تعديل محاذاة الـ Checkbox */
+.stCheckbox {
+    direction: rtl;
+    text-align: right;
+}
+
+/* 5. تنسيق الأزرار */
+div.stButton > button {
+    background-color: #2E86C1;
+    color: white;
+    font-size: 18px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    width: 100%;
+    margin-top: 20px;
+    font-weight: bold;
+}
+
+/* 6. تحسين شكل التنبيهات */
+.stAlert {
+    direction: rtl;
+    text-align: right;
+    font-weight: bold;
+}
+
+/* 7. إخفاء القوائم الافتراضية */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# قائمة الأذكار
+# قائمة الأذكار (أثناء الانتظار)
 # ---------------------------------------------------------
 AZKAR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم 🌿",
@@ -46,16 +91,20 @@ AZKAR_LIST = [
 ]
 
 # ---------------------------------------------------------
-# 🔐 إعدادات الأمان
+# 🔐 إعدادات الأمان (Secrets)
 # ---------------------------------------------------------
-try: GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
-except: GOOGLE_SHEET_URL = ""
+try:
+    GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
+except:
+    GOOGLE_SHEET_URL = ""
 
-try: api_key = st.secrets["GEMINI_API_KEY"]
-except: api_key = None
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except:
+    api_key = None
 
 # ---------------------------------------------------------
-# دوال التنسيق (Word Functions) - تم تحديثها لإزالة الـ #
+# دوال التنسيق (Word Functions) - مع تنظيف الرموز
 # ---------------------------------------------------------
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if hasattr(parent, 'add_paragraph'): p = parent.add_paragraph(style=style)
@@ -63,7 +112,7 @@ def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if align: p.alignment = align
     else: p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in text) else WD_ALIGN_PARAGRAPH.LEFT
     
-    # تنظيف أي رموز ماركداون متبقية داخل النص
+    # تنظيف أي رموز ماركداون متبقية داخل الفقرات
     parts = text.split('**')
     for i, part in enumerate(parts):
         if not part: continue
@@ -119,24 +168,29 @@ def create_styled_word_doc(text_content, user_title):
     
     for line in lines:
         line = line.strip()
+        # معالجة الجداول
         if line.startswith('|') and line.endswith('|'):
             table_buffer.append(line); continue
         else:
             if table_buffer: create_word_table(doc, table_buffer); table_buffer = []
+        
         if not line: continue
         
-        # --- التحديث هنا: تنظيف العناوين من أي عدد من الـ # ---
+        # --- تنظيف العناوين (Headers) ---
+        # استخدام lstrip لإزالة أي عدد من # سواء كانت # أو ## أو ###
         if line.startswith('#'):
-            # lstrip('#') تحذف كل الشبابيك من البداية
-            clean_text = line.lstrip('#').strip().replace('**', '') 
+            clean_text = line.lstrip('#').strip().replace('**', '')
             h = doc.add_heading(clean_text, level=1)
+            # ضبط المحاذاة حسب اللغة
             h.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in line) else WD_ALIGN_PARAGRAPH.LEFT
             for run in h.runs:
                 run.font.name = 'Times New Roman'; run.font.size = Pt(14); run.font.bold = True; run.font.color.rgb = RGBColor(0, 0, 0)
         
+        # القوائم النقطية
         elif line.startswith('* ') or line.startswith('- '):
             clean_text = line.replace('* ', '', 1).replace('- ', '', 1)
             add_markdown_paragraph(doc, clean_text, style='List Bullet')
+        # الفقرات العادية
         else:
             add_markdown_paragraph(doc, line)
             
@@ -174,7 +228,7 @@ st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسر�
 st.divider()
 st.subheader("⚙️ إعدادات الملف (Preferences)")
 
-# 2. الإعدادات
+# 2. الإعدادات (Dropdown)
 doc_type_selection = st.selectbox(
     "نوع المحتوى (Output Format):",
     options=["Lecture / Notes", "Exam / MCQ"],
@@ -182,6 +236,7 @@ doc_type_selection = st.selectbox(
     placeholder="اختار نوع الملف يا دكتور.."
 )
 
+# ظهور التوضيحات تلقائياً
 if doc_type_selection == "Lecture / Notes":
     st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
 elif doc_type_selection == "Exam / MCQ":
@@ -215,14 +270,14 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
                     image_bytes = uploaded_file.getvalue()
                     response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
-                    # --- التعديل هنا: حذف الـ # من اسم المصدر ---
+                    # حذف علامة الشباك من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                 elif uploaded_file.type == 'application/pdf':
                     temp_filename = f"temp_{uploaded_file.name}"
                     with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
                     uploaded_pdf = genai.upload_file(temp_filename)
                     response = model.generate_content([prompt, uploaded_pdf])
-                    # --- التعديل هنا: حذف الـ # من اسم المصدر ---
+                    # حذف علامة الشباك من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                     try: os.remove(temp_filename)
                     except: pass
@@ -233,30 +288,30 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         except Exception as e:
             st.error(f"خطأ تقني: {e}")
 
-# 4. عرض النتائج
+# 4. عرض النتائج (تعريب كامل)
 if st.session_state['converted_text']:
     st.divider()
     docx_file = create_styled_word_doc(st.session_state['converted_text'], user_filename)
     col_download_area, col_info = st.columns([2, 1])
     with col_download_area:
-        st.success("⬇️ Your Document is Ready:")
+        st.success("🎉 ملفك جاهز يا بطل! حمل من هنا:")
         st.download_button(
-            label=f"💾 Download Word File ({user_filename}.docx)",
+            label=f"💾 تحميل ملف الوورد ({user_filename}.docx)",
             data=docx_file.getvalue(),
             file_name=f"{user_filename}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True
         )
     st.divider()
-    st.subheader("📝 Live Editor (Optional)")
-    tab1, tab2 = st.tabs(["✍️ Edit Text", "👁️ Preview"])
+    st.subheader("📝 مراجعة النص (Live Editor)")
+    tab1, tab2 = st.tabs(["✍️ تعديل الكلام", "👁️ المعاينة"])
     with tab1:
-        edited_text = st.text_area("تعديل النص:", value=st.session_state['converted_text'], height=500, label_visibility="collapsed")
+        edited_text = st.text_area("عدل براحتك هنا:", value=st.session_state['converted_text'], height=500, label_visibility="collapsed")
         if edited_text != st.session_state['converted_text']: st.session_state['converted_text'] = edited_text
     with tab2: st.markdown(st.session_state['converted_text'])
 
 # ---------------------------------------------------------
-# صندوق الملاحظات
+# صندوق الملاحظات (الصدقة الجارية)
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("💌 رسالة ودعوة")
@@ -277,15 +332,15 @@ with st.sidebar:
         if submit_feedback:
             if feedback_text:
                 if not GOOGLE_SHEET_URL:
-                    st.warning("⚠️ Feedback service is not configured.")
+                    st.warning("⚠️ خدمة الرسائل غير مفعلة (تأكد من الرابط السري).")
                 else:
                     try:
                         response = requests.post(GOOGLE_SHEET_URL, json={"feedback": feedback_text})
                         if response.status_code == 200:
                             st.success("جزاك الله خيراً! رسالتك وصلت ❤️")
                         else:
-                            st.error("Connection Error.")
+                            st.error("حدث خطأ في الاتصال.")
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"خطأ: {e}")
             else:
                 st.warning("الرجاء كتابة رسالة أولاً.")
