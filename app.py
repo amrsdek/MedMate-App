@@ -17,7 +17,7 @@ import threading
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
 
 # ---------------------------------------------------------
-# CSS للمظهر (RTL + إخفاء كامل لعلامات Streamlit - النسخة النووية)
+# CSS للمظهر (RTL + إخفاء كامل لعلامات Streamlit - Clean UI)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -208,41 +208,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-if 'converted_text' not in st.session_state:
-    st.session_state['converted_text'] = ""
-
-# 1. منطقة الرفع
-uploaded_files = st.file_uploader(
-    "📂 ارفع صور المحاضرات (سبورة/ورق) أو ملفات PDF",
-    type=['png', 'jpg', 'jpeg', 'pdf'], 
-    accept_multiple_files=True
-)
-st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسرعة، يفضل ترفع **10-15 صورة** أو **ملف PDF واحد (لا يزيد عن 50 صفحة)** في المرة الواحدة.")
-
-st.divider()
-st.subheader("⚙️ إعدادات الملف (Preferences)")
-
-# 2. الإعدادات
-doc_type_selection = st.selectbox(
-    "نوع المحتوى (Output Format):",
-    options=["Lecture / Notes", "Exam / MCQ"],
-    index=None,
-    placeholder="اختار نوع الملف يا دكتور.."
-)
-
-if doc_type_selection == "Lecture / Notes":
-    st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
-elif doc_type_selection == "Exam / MCQ":
-    st.info("ℹ️ للامتحانات: هيتم التنسيق كأسئلة منفصلة واختيارات دقيقة.")
-
-col_opt1, col_opt2 = st.columns(2)
-with col_opt1: is_handwritten = st.checkbox("✍️ هل الملف بخط اليد؟")
-with col_opt2: user_filename = st.text_input("اسم الملف الناتج:", value="MedMate Note")
-
 st.divider()
 
 # ---------------------------------------------------------
-# 4. صندوق الملاحظات (تم نقله هنا ليكون متاحاً قبل الضغط) 🆕
+# 1. صندوق الملاحظات (تم نقله هنا: في المقدمة) 🆕
 # ---------------------------------------------------------
 st.markdown("""
 <div style="text-align: right; direction: rtl; background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
@@ -276,7 +245,38 @@ with st.form(key='feedback_form'):
 
 st.divider()
 
-# 3. زر التحويل
+if 'converted_text' not in st.session_state:
+    st.session_state['converted_text'] = ""
+
+# 2. منطقة الرفع
+uploaded_files = st.file_uploader(
+    "📂 ارفع صور المحاضرات (سبورة/ورق) أو ملفات PDF",
+    type=['png', 'jpg', 'jpeg', 'pdf'], 
+    accept_multiple_files=True
+)
+st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسرعة، يفضل ترفع **10-15 صورة** أو **ملف PDF واحد (لا يزيد عن 50 صفحة)** في المرة الواحدة.")
+
+st.divider()
+st.subheader("⚙️ إعدادات الملف (Preferences)")
+
+# 3. الإعدادات
+doc_type_selection = st.selectbox(
+    "نوع المحتوى (Output Format):",
+    options=["Lecture / Notes", "Exam / MCQ"],
+    index=None,
+    placeholder="اختار نوع الملف يا دكتور.."
+)
+
+if doc_type_selection == "Lecture / Notes":
+    st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
+elif doc_type_selection == "Exam / MCQ":
+    st.info("ℹ️ للامتحانات: هيتم التنسيق كأسئلة منفصلة واختيارات دقيقة.")
+
+col_opt1, col_opt2 = st.columns(2)
+with col_opt1: is_handwritten = st.checkbox("✍️ هل الملف بخط اليد؟")
+with col_opt2: user_filename = st.text_input("اسم الملف الناتج:", value="MedMate Note")
+
+# 4. زر التحويل
 if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
     if not uploaded_files: st.warning("⚠️ الرجاء رفع الملفات أولاً.")
     elif not api_key: st.error("⚠️ لم يتم العثور على مفتاح API في الإعدادات! يرجى التواصل مع المطور.")
@@ -293,7 +293,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 prompt_type = "Exam / MCQ" if doc_type_selection == "Exam / MCQ" else "Lecture / Notes"
                 prompt = get_medical_prompt(prompt_type, is_handwritten)
                 
-                # --- [الحل الجذري] قراءة البيانات في المسار الرئيسي لمنع التجمد ---
+                # قراءة الملفات في الخيط الرئيسي لمنع التجمد
                 file_bytes = uploaded_file.getvalue()
                 file_type = uploaded_file.type
                 file_name = uploaded_file.name
@@ -305,7 +305,6 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 def process_file_in_background():
                     try:
                         if file_type in ['image/png', 'image/jpeg', 'image/jpg']:
-                            # نستخدم البيانات الجاهزة
                             response = model.generate_content([prompt, {"mime_type": file_type, "data": file_bytes}])
                             thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
                         
@@ -325,14 +324,13 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                     except Exception as e:
                         thread_result["error"] = e
 
-                # بدء المعالجة في خيط منفصل (Thread)
+                # بدء المعالجة في خيط منفصل
                 t = threading.Thread(target=process_file_in_background)
                 t.start()
 
-                # حلقة تكرارية لتغيير الأذكار (بدون بوب آب، نص عادي)
+                # حلقة الأذكار أثناء الانتظار
                 while t.is_alive():
                     current_zikr = random.choice(AZKAR_LIST)
-                    # عرض الذكر كنص عادي فوق البروجريس بار
                     status_text.markdown(f"**جاري تحليل الملف ({i+1}/{len(uploaded_files)}).. {current_zikr}** 📿")
                     time.sleep(2.5) 
 
