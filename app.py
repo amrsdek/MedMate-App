@@ -19,58 +19,13 @@ st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_ico
 # ---------------------------------------------------------
 st.markdown("""
 <style>
-/* 1. ضبط اتجاه الصفحة بالكامل لليمين */
-.stApp {
-    direction: rtl;
-    text-align: right;
-    background-color: #f8f9fa;
-}
-
-/* 2. ضبط العناوين والنصوص */
-h1, h2, h3, p, div, .stMarkdown, .caption {
-    text-align: right; 
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-/* 3. تعديل القوائم الجانبية (Sidebar) */
-section[data-testid="stSidebar"] {
-    direction: rtl;
-    text-align: right;
-}
-
-/* 4. تعديل مدخلات النصوص والقوائم */
-.stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
-    direction: rtl;
-    text-align: right;
-}
-
-/* تعديل محاذاة الـ Checkbox */
-.stCheckbox {
-    direction: rtl;
-    text-align: right;
-}
-
-/* 5. تنسيق الأزرار */
-div.stButton > button {
-    background-color: #2E86C1;
-    color: white;
-    font-size: 18px;
-    padding: 10px 20px;
-    border-radius: 8px;
-    border: none;
-    width: 100%;
-    margin-top: 20px;
-    font-weight: bold;
-}
-
-/* 6. تحسين شكل التنبيهات */
-.stAlert {
-    direction: rtl;
-    text-align: right;
-    font-weight: bold;
-}
-
-/* 7. إخفاء القوائم الافتراضية */
+.stApp { direction: rtl; text-align: right; background-color: #f8f9fa; }
+h1, h2, h3, p, div, .stMarkdown, .caption { text-align: right; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+section[data-testid="stSidebar"] { direction: rtl; text-align: right; }
+.stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] { direction: rtl; text-align: right; }
+.stCheckbox { direction: rtl; text-align: right; }
+div.stButton > button { background-color: #2E86C1; color: white; font-size: 18px; padding: 10px 20px; border-radius: 8px; border: none; width: 100%; margin-top: 20px; font-weight: bold; }
+.stAlert { direction: rtl; text-align: right; font-weight: bold; }
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 </style>
@@ -91,26 +46,24 @@ AZKAR_LIST = [
 ]
 
 # ---------------------------------------------------------
-# 🔐 إعدادات الأمان (Secrets)
+# 🔐 إعدادات الأمان
 # ---------------------------------------------------------
-try:
-    GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
-except:
-    GOOGLE_SHEET_URL = ""
+try: GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
+except: GOOGLE_SHEET_URL = ""
 
-try:
-    api_key = st.secrets["GEMINI_API_KEY"]
-except:
-    api_key = None
+try: api_key = st.secrets["GEMINI_API_KEY"]
+except: api_key = None
 
 # ---------------------------------------------------------
-# دوال التنسيق (Word Functions)
+# دوال التنسيق (Word Functions) - تم تحديثها لإزالة الـ #
 # ---------------------------------------------------------
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if hasattr(parent, 'add_paragraph'): p = parent.add_paragraph(style=style)
     else: p = parent 
     if align: p.alignment = align
     else: p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in text) else WD_ALIGN_PARAGRAPH.LEFT
+    
+    # تنظيف أي رموز ماركداون متبقية داخل النص
     parts = text.split('**')
     for i, part in enumerate(parts):
         if not part: continue
@@ -160,8 +113,10 @@ def create_styled_word_doc(text_content, user_title):
     main_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for run in main_heading.runs:
         run.font.name = 'Times New Roman'; run.font.size = Pt(16); run.font.bold = True; run.font.color.rgb = RGBColor(0, 0, 0)
+    
     lines = text_content.split('\n')
     table_buffer = []
+    
     for line in lines:
         line = line.strip()
         if line.startswith('|') and line.endswith('|'):
@@ -169,17 +124,22 @@ def create_styled_word_doc(text_content, user_title):
         else:
             if table_buffer: create_word_table(doc, table_buffer); table_buffer = []
         if not line: continue
-        if line.startswith('## ') or line.startswith('# '):
-            clean_text = line.replace('## ', '').replace('# ', '').replace('**', '')
+        
+        # --- التحديث هنا: تنظيف العناوين من أي عدد من الـ # ---
+        if line.startswith('#'):
+            # lstrip('#') تحذف كل الشبابيك من البداية
+            clean_text = line.lstrip('#').strip().replace('**', '') 
             h = doc.add_heading(clean_text, level=1)
             h.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in line) else WD_ALIGN_PARAGRAPH.LEFT
             for run in h.runs:
                 run.font.name = 'Times New Roman'; run.font.size = Pt(14); run.font.bold = True; run.font.color.rgb = RGBColor(0, 0, 0)
+        
         elif line.startswith('* ') or line.startswith('- '):
             clean_text = line.replace('* ', '', 1).replace('- ', '', 1)
             add_markdown_paragraph(doc, clean_text, style='List Bullet')
         else:
             add_markdown_paragraph(doc, line)
+            
     if table_buffer: create_word_table(doc, table_buffer)
     bio = io.BytesIO(); doc.save(bio)
     return bio
@@ -203,9 +163,9 @@ st.markdown("""
 if 'converted_text' not in st.session_state:
     st.session_state['converted_text'] = ""
 
-# 1. منطقة الرفع (تم حذف المستطيل الأزرق st.info حسب طلبك) 🗑️
+# 1. منطقة الرفع
 uploaded_files = st.file_uploader(
-    "📂 ارفع صور المحاضرات (سبورة/ورق) أو ملفات PDF", # نقلنا النص ليكون عنواناً للزر نفسه
+    "📂 ارفع صور المحاضرات (سبورة/ورق) أو ملفات PDF",
     type=['png', 'jpg', 'jpeg', 'pdf'], 
     accept_multiple_files=True
 )
@@ -214,7 +174,7 @@ st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسر�
 st.divider()
 st.subheader("⚙️ إعدادات الملف (Preferences)")
 
-# 2. الإعدادات (Dropdown List الجديدة) 🔽
+# 2. الإعدادات
 doc_type_selection = st.selectbox(
     "نوع المحتوى (Output Format):",
     options=["Lecture / Notes", "Exam / MCQ"],
@@ -222,7 +182,6 @@ doc_type_selection = st.selectbox(
     placeholder="اختار نوع الملف يا دكتور.."
 )
 
-# عرض التوضيحات بناءً على الاختيار (Dynamic Caption)
 if doc_type_selection == "Lecture / Notes":
     st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
 elif doc_type_selection == "Exam / MCQ":
@@ -256,13 +215,15 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
                     image_bytes = uploaded_file.getvalue()
                     response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
-                    full_combined_text += f"\n\n# Source: {uploaded_file.name}\n" + response.text
+                    # --- التعديل هنا: حذف الـ # من اسم المصدر ---
+                    full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                 elif uploaded_file.type == 'application/pdf':
                     temp_filename = f"temp_{uploaded_file.name}"
                     with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
                     uploaded_pdf = genai.upload_file(temp_filename)
                     response = model.generate_content([prompt, uploaded_pdf])
-                    full_combined_text += f"\n\n# Source: {uploaded_file.name}\n" + response.text
+                    # --- التعديل هنا: حذف الـ # من اسم المصدر ---
+                    full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                     try: os.remove(temp_filename)
                     except: pass
             
@@ -295,7 +256,7 @@ if st.session_state['converted_text']:
     with tab2: st.markdown(st.session_state['converted_text'])
 
 # ---------------------------------------------------------
-# صندوق الملاحظات (الصدقة الجارية)
+# صندوق الملاحظات
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("💌 رسالة ودعوة")
