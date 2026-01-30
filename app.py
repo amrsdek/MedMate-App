@@ -15,40 +15,35 @@ import random
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
 
 # ---------------------------------------------------------
-# CSS للمظهر (RTL + إخفاء شعار Streamlit والمطور تماماً)
+# CSS للمظهر (RTL + إخفاء كامل لعلامات Streamlit)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
-/* 1. ضبط اتجاه الصفحة بالكامل لليمين */
+/* 1. إعدادات RTL واتجاه الصفحة */
 .stApp {
     direction: rtl;
     text-align: right;
     background-color: #f8f9fa;
 }
 
-/* 2. ضبط العناوين والنصوص */
+/* 2. تنسيق النصوص والعناوين */
 h1, h2, h3, p, div, .stMarkdown, .caption {
     text-align: right; 
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* 3. تعديل القوائم الجانبية (Sidebar) */
+/* 3. تنسيق القوائم الجانبية */
 section[data-testid="stSidebar"] {
     direction: rtl;
     text-align: right;
 }
 
-/* 4. تعديل مدخلات النصوص والقوائم */
+/* 4. تنسيق المدخلات */
 .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
     direction: rtl;
     text-align: right;
 }
-
-/* تعديل محاذاة الـ Checkbox */
-.stCheckbox {
-    direction: rtl;
-    text-align: right;
-}
+.stCheckbox { direction: rtl; text-align: right; }
 
 /* 5. تنسيق الأزرار */
 div.stButton > button {
@@ -63,41 +58,36 @@ div.stButton > button {
     font-weight: bold;
 }
 
-/* 6. تحسين شكل التنبيهات */
-.stAlert {
-    direction: rtl;
-    text-align: right;
-    font-weight: bold;
-}
+/* 6. تنسيق التنبيهات */
+.stAlert { direction: rtl; text-align: right; font-weight: bold; }
 
 /* ----------------------------------------------------------- */
-/* 🚫 منطقة الإخفاء (Hide Streamlit Branding & Creator Name) */
+/* 🚫 منطقة الإخفاء القسري (إخفاء الهوية والفوتر) */
 /* ----------------------------------------------------------- */
 
 /* إخفاء القائمة العلوية (3 شرط) */
 #MainMenu {visibility: hidden;}
 
-/* إخفاء الفوتر السفلي (Created by / Made with Streamlit) */
-footer {
-    visibility: hidden;
-    height: 0px;
-}
+/* إخفاء الفوتر السفلي تماماً */
+footer {visibility: hidden !important; height: 0px !important;}
 
-/* إخفاء الشريط العلوي الملون */
-header {
-    visibility: hidden;
-}
+/* إخفاء الهيدر العلوي الملون */
+header {visibility: hidden !important;}
 
-/* إخفاء أي عناصر تعريفية أخرى للمطور */
-.stDeployButton {display:none;}
+/* إخفاء الشريط السفلي (Created by...) باستخدام Wildcard Selector */
+/* يستهدف أي عنصر الكلاس بتاعه يبدأ بكلمة viewerBadge */
+div[class^="viewerBadge"] {display: none !important;}
+div[class*="viewerBadge"] {display: none !important;}
+
+/* إخفاء زر النشر وأدوات المطور */
+.stDeployButton {display:none !important;}
 [data-testid="stToolbar"] {visibility: hidden !important;}
-.viewerBadge_container__1QSob {display: none !important;} 
 
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# قائمة الأذكار
+# قائمة الأذكار (تظهر أثناء التحميل)
 # ---------------------------------------------------------
 AZKAR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم 🌿",
@@ -111,7 +101,7 @@ AZKAR_LIST = [
 ]
 
 # ---------------------------------------------------------
-# 🔐 إعدادات الأمان
+# 🔐 إعدادات الأمان (Secrets)
 # ---------------------------------------------------------
 try:
     GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
@@ -124,7 +114,7 @@ except:
     api_key = None
 
 # ---------------------------------------------------------
-# دوال التنسيق (Word Functions)
+# دوال التنسيق (Word Functions) - (مع تنظيف الرموز #)
 # ---------------------------------------------------------
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if hasattr(parent, 'add_paragraph'): p = parent.add_paragraph(style=style)
@@ -194,6 +184,7 @@ def create_styled_word_doc(text_content, user_title):
         
         if not line: continue
         
+        # تنظيف العناوين من #
         if line.startswith('#'):
             clean_text = line.lstrip('#').strip().replace('**', '')
             h = doc.add_heading(clean_text, level=1)
@@ -240,7 +231,7 @@ st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسر�
 st.divider()
 st.subheader("⚙️ إعدادات الملف (Preferences)")
 
-# 2. الإعدادات
+# 2. الإعدادات (قائمة منسدلة)
 doc_type_selection = st.selectbox(
     "نوع المحتوى (Output Format):",
     options=["Lecture / Notes", "Exam / MCQ"],
@@ -248,6 +239,7 @@ doc_type_selection = st.selectbox(
     placeholder="اختار نوع الملف يا دكتور.."
 )
 
+# عرض التوضيح
 if doc_type_selection == "Lecture / Notes":
     st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
 elif doc_type_selection == "Exam / MCQ":
@@ -281,12 +273,14 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
                     image_bytes = uploaded_file.getvalue()
                     response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
+                    # حذف # من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                 elif uploaded_file.type == 'application/pdf':
                     temp_filename = f"temp_{uploaded_file.name}"
                     with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
                     uploaded_pdf = genai.upload_file(temp_filename)
                     response = model.generate_content([prompt, uploaded_pdf])
+                    # حذف # من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                     try: os.remove(temp_filename)
                     except: pass
@@ -298,7 +292,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
             st.error(f"خطأ تقني: {e}")
 
 # ---------------------------------------------------------
-# 4. صندوق الملاحظات (تم نقله هنا)
+# 4. صندوق الملاحظات (موجود في المنتصف)
 # ---------------------------------------------------------
 st.divider()
 st.markdown("""
