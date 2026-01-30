@@ -15,7 +15,7 @@ import random
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
 
 # ---------------------------------------------------------
-# CSS للمظهر (RTL + تحسينات الواجهة العربية)
+# CSS للمظهر (RTL + إخفاء شعار Streamlit والمطور)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -70,14 +70,18 @@ div.stButton > button {
     font-weight: bold;
 }
 
-/* 7. إخفاء القوائم الافتراضية */
+/* 7. 🚫 إخفاء جميع عناصر Streamlit الافتراضية (Clean UI) */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
+header {visibility: hidden;}
+.stDeployButton {display:none;}
+[data-testid="stToolbar"] {visibility: hidden !important;}
+.viewerBadge_container__1QSob {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# قائمة الأذكار
+# قائمة الأذكار (أثناء الانتظار)
 # ---------------------------------------------------------
 AZKAR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم 🌿",
@@ -91,7 +95,7 @@ AZKAR_LIST = [
 ]
 
 # ---------------------------------------------------------
-# 🔐 إعدادات الأمان
+# 🔐 إعدادات الأمان (Secrets)
 # ---------------------------------------------------------
 try:
     GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
@@ -104,7 +108,7 @@ except:
     api_key = None
 
 # ---------------------------------------------------------
-# دوال التنسيق (Word Functions)
+# دوال التنسيق (Word Functions) - مع تنظيف الرموز
 # ---------------------------------------------------------
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if hasattr(parent, 'add_paragraph'): p = parent.add_paragraph(style=style)
@@ -112,6 +116,7 @@ def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if align: p.alignment = align
     else: p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in text) else WD_ALIGN_PARAGRAPH.LEFT
     
+    # تنظيف أي رموز ماركداون متبقية
     parts = text.split('**')
     for i, part in enumerate(parts):
         if not part: continue
@@ -174,6 +179,7 @@ def create_styled_word_doc(text_content, user_title):
         
         if not line: continue
         
+        # تنظيف العناوين من الشبابيك
         if line.startswith('#'):
             clean_text = line.lstrip('#').strip().replace('**', '')
             h = doc.add_heading(clean_text, level=1)
@@ -220,7 +226,7 @@ st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسر�
 st.divider()
 st.subheader("⚙️ إعدادات الملف (Preferences)")
 
-# 2. الإعدادات
+# 2. الإعدادات (Dropdown)
 doc_type_selection = st.selectbox(
     "نوع المحتوى (Output Format):",
     options=["Lecture / Notes", "Exam / MCQ"],
@@ -261,12 +267,14 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
                     image_bytes = uploaded_file.getvalue()
                     response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
+                    # حذف # من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                 elif uploaded_file.type == 'application/pdf':
                     temp_filename = f"temp_{uploaded_file.name}"
                     with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
                     uploaded_pdf = genai.upload_file(temp_filename)
                     response = model.generate_content([prompt, uploaded_pdf])
+                    # حذف # من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                     try: os.remove(temp_filename)
                     except: pass
@@ -278,7 +286,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
             st.error(f"خطأ تقني: {e}")
 
 # ---------------------------------------------------------
-# 4. صندوق الملاحظات (تم نقله هنا: بعد الزر وقبل التحميل) 🆕
+# 4. صندوق الملاحظات (الصدقة الجارية) - في المنتصف
 # ---------------------------------------------------------
 st.divider()
 st.markdown("""
