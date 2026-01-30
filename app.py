@@ -294,7 +294,7 @@ if st.session_state['converted_text']:
     docx_file = create_styled_word_doc(st.session_state['converted_text'], user_filename)
     col_download_area, col_info = st.columns([2, 1])
     with col_download_area:
-        st.success("🎉 ملفك جاهز يا بطل! حمل من هنا:")
+        st.success("🎉 ملفك جاهز يا دكتور! حمل من هنا:")
         st.download_button(
             label=f"💾 تحميل ملف الوورد ({user_filename}.docx)",
             data=docx_file.getvalue(),
@@ -344,3 +344,4 @@ with st.sidebar:
                         st.error(f"خطأ: {e}")
             else:
                 st.warning("الرجاء كتابة رسالة أولاً.")
+
