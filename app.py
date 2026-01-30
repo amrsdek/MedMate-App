@@ -17,40 +17,35 @@ import threading
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
 
 # ---------------------------------------------------------
-# CSS للمظهر (RTL + تحسينات الواجهة العربية)
+# CSS للمظهر (RTL + إخفاء كامل لعلامات Streamlit)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
-/* 1. ضبط اتجاه الصفحة بالكامل لليمين */
+/* 1. إعدادات RTL واتجاه الصفحة */
 .stApp {
     direction: rtl;
     text-align: right;
     background-color: #f8f9fa;
 }
 
-/* 2. ضبط العناوين والنصوص */
+/* 2. تنسيق النصوص والعناوين */
 h1, h2, h3, p, div, .stMarkdown, .caption {
     text-align: right; 
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* 3. تعديل القوائم الجانبية (Sidebar) */
+/* 3. تنسيق القوائم الجانبية */
 section[data-testid="stSidebar"] {
     direction: rtl;
     text-align: right;
 }
 
-/* 4. تعديل مدخلات النصوص والقوائم */
+/* 4. تنسيق المدخلات */
 .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
     direction: rtl;
     text-align: right;
 }
-
-/* تعديل محاذاة الـ Checkbox */
-.stCheckbox {
-    direction: rtl;
-    text-align: right;
-}
+.stCheckbox { direction: rtl; text-align: right; }
 
 /* 5. تنسيق الأزرار */
 div.stButton > button {
@@ -65,21 +60,35 @@ div.stButton > button {
     font-weight: bold;
 }
 
-/* 6. تحسين شكل التنبيهات */
-.stAlert {
-    direction: rtl;
-    text-align: right;
-    font-weight: bold;
-}
+/* 6. تنسيق التنبيهات */
+.stAlert { direction: rtl; text-align: right; font-weight: bold; }
 
-/* 7. إخفاء القوائم الافتراضية */
+/* ----------------------------------------------------------- */
+/* 🚫 منطقة الإخفاء القسري (إخفاء الهوية والفوتر) */
+/* ----------------------------------------------------------- */
+
+/* إخفاء القائمة العلوية (3 شرط) */
 #MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
+
+/* إخفاء الفوتر السفلي تماماً */
+footer {visibility: hidden !important; height: 0px !important;}
+
+/* إخفاء الهيدر العلوي الملون */
+header {visibility: hidden !important;}
+
+/* إخفاء الشريط السفلي (Created by...) باستخدام Wildcard Selector */
+div[class^="viewerBadge"] {display: none !important;}
+div[class*="viewerBadge"] {display: none !important;}
+
+/* إخفاء زر النشر وأدوات المطور */
+.stDeployButton {display:none !important;}
+[data-testid="stToolbar"] {visibility: hidden !important;}
+
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# قائمة الأذكار
+# قائمة الأذكار (تظهر أثناء التحميل)
 # ---------------------------------------------------------
 AZKAR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم 🌿",
@@ -93,7 +102,7 @@ AZKAR_LIST = [
 ]
 
 # ---------------------------------------------------------
-# 🔐 إعدادات الأمان
+# 🔐 إعدادات الأمان (Secrets)
 # ---------------------------------------------------------
 try:
     GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
@@ -176,6 +185,7 @@ def create_styled_word_doc(text_content, user_title):
         
         if not line: continue
         
+        # تنظيف العناوين من #
         if line.startswith('#'):
             clean_text = line.lstrip('#').strip().replace('**', '')
             h = doc.add_heading(clean_text, level=1)
@@ -253,41 +263,55 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         
         try:
             for i, uploaded_file in enumerate(uploaded_files):
-                # تجهيز متغيرات للتحكم في العملية
                 prompt_type = "Exam / MCQ" if doc_type_selection == "Exam / MCQ" else "Lecture / Notes"
                 prompt = get_medical_prompt(prompt_type, is_handwritten)
                 
-                # حاوية للنتيجة لأن الـ Thread لا يرجع قيمة مباشرة
+                # --- [التصحيح الهام] قراءة الملفات في الخيط الرئيسي ---
+                file_bytes = uploaded_file.getvalue()
+                file_type = uploaded_file.type
+                file_name = uploaded_file.name
+                
+                # حاوية للنتيجة
                 thread_result = {"text": None, "error": None}
 
-                # دالة المعالجة التي ستعمل في الخلفية
+                # دالة المعالجة الخلفية
                 def process_file_in_background():
                     try:
-                        if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
-                            image_bytes = uploaded_file.getvalue()
-                            response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
-                            thread_result["text"] = f"\n\nSource: {uploaded_file.name}\n" + response.text
+                        if file_type in ['image/png', 'image/jpeg', 'image/jpg']:
+                            # نستخدم البيانات التي قرأناها مسبقاً
+                            response = model.generate_content([prompt, {"mime_type": file_type, "data": file_bytes}])
+                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
                         
-                        elif uploaded_file.type == 'application/pdf':
-                            temp_filename = f"temp_{uploaded_file.name}"
-                            with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
+                        elif file_type == 'application/pdf':
+                            # في حالة PDF نحتاج لحفظ ملف مؤقت
+                            # سنقوم بمعالجة خاصة هنا لتجنب تداخل الملفات
+                            temp_filename = f"temp_{int(time.time())}_{random.randint(1000,9999)}.pdf"
+                            with open(temp_filename, "wb") as f: f.write(file_bytes)
+                            
                             uploaded_pdf = genai.upload_file(temp_filename)
+                            # انتظار معالجة الملف من جهة جوجل (أحياناً يحتاج ثواني)
+                            while uploaded_pdf.state.name == "PROCESSING":
+                                time.sleep(1)
+                                uploaded_pdf = genai.get_file(uploaded_pdf.name)
+
                             response = model.generate_content([prompt, uploaded_pdf])
-                            thread_result["text"] = f"\n\nSource: {uploaded_file.name}\n" + response.text
+                            thread_result["text"] = f"\n\nSource: {file_name}\n" + response.text
+                            
+                            # تنظيف
                             try: os.remove(temp_filename)
                             except: pass
                     except Exception as e:
                         thread_result["error"] = e
 
-                # بدء المعالجة في خيط منفصل (Thread)
+                # بدء المعالجة في خيط منفصل
                 t = threading.Thread(target=process_file_in_background)
                 t.start()
 
-                # حلقة تكرارية لتغيير الأذكار أثناء انتظار انتهاء المعالجة
+                # حلقة تكرارية لتغيير الأذكار
                 while t.is_alive():
                     current_zikr = random.choice(AZKAR_LIST)
                     status_text.markdown(f"**جاري تحليل الملف ({i+1}/{len(uploaded_files)}).. {current_zikr}** 📿")
-                    time.sleep(2) # انتظار ثانيتين قبل تغيير الذكر
+                    time.sleep(2.5) # زدنا الوقت قليلاً لتقليل الحمل
 
                 # التأكد من انتهاء الخيط
                 t.join()
@@ -299,7 +323,6 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 if thread_result["text"]:
                     full_combined_text += thread_result["text"]
                 
-                # تحديث شريط التقدم بعد انتهاء كل ملف
                 progress_bar.progress((i + 1) / len(uploaded_files))
             
             st.session_state['converted_text'] = full_combined_text
@@ -310,7 +333,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
             st.error(f"خطأ تقني: {e}")
 
 # ---------------------------------------------------------
-# 4. صندوق الملاحظات (تم نقله هنا: بعد الزر وقبل التحميل) 🆕
+# 4. صندوق الملاحظات (موجود في المنتصف)
 # ---------------------------------------------------------
 st.divider()
 st.markdown("""
@@ -346,7 +369,7 @@ with st.form(key='feedback_form'):
 st.divider()
 
 # ---------------------------------------------------------
-# 5. عرض النتائج (يظهر هنا بعد صندوق الملاحظات)
+# 5. عرض النتائج
 # ---------------------------------------------------------
 if st.session_state['converted_text']:
     docx_file = create_styled_word_doc(st.session_state['converted_text'], user_filename)
