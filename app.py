@@ -77,7 +77,7 @@ footer {visibility: hidden;}
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# قائمة الأذكار (أثناء الانتظار)
+# قائمة الأذكار
 # ---------------------------------------------------------
 AZKAR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم 🌿",
@@ -91,7 +91,7 @@ AZKAR_LIST = [
 ]
 
 # ---------------------------------------------------------
-# 🔐 إعدادات الأمان (Secrets)
+# 🔐 إعدادات الأمان
 # ---------------------------------------------------------
 try:
     GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
@@ -104,7 +104,7 @@ except:
     api_key = None
 
 # ---------------------------------------------------------
-# دوال التنسيق (Word Functions) - مع تنظيف الرموز
+# دوال التنسيق (Word Functions)
 # ---------------------------------------------------------
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if hasattr(parent, 'add_paragraph'): p = parent.add_paragraph(style=style)
@@ -112,7 +112,6 @@ def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if align: p.alignment = align
     else: p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in text) else WD_ALIGN_PARAGRAPH.LEFT
     
-    # تنظيف أي رموز ماركداون متبقية داخل الفقرات
     parts = text.split('**')
     for i, part in enumerate(parts):
         if not part: continue
@@ -168,7 +167,6 @@ def create_styled_word_doc(text_content, user_title):
     
     for line in lines:
         line = line.strip()
-        # معالجة الجداول
         if line.startswith('|') and line.endswith('|'):
             table_buffer.append(line); continue
         else:
@@ -176,21 +174,15 @@ def create_styled_word_doc(text_content, user_title):
         
         if not line: continue
         
-        # --- تنظيف العناوين (Headers) ---
-        # استخدام lstrip لإزالة أي عدد من # سواء كانت # أو ## أو ###
         if line.startswith('#'):
             clean_text = line.lstrip('#').strip().replace('**', '')
             h = doc.add_heading(clean_text, level=1)
-            # ضبط المحاذاة حسب اللغة
             h.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in line) else WD_ALIGN_PARAGRAPH.LEFT
             for run in h.runs:
                 run.font.name = 'Times New Roman'; run.font.size = Pt(14); run.font.bold = True; run.font.color.rgb = RGBColor(0, 0, 0)
-        
-        # القوائم النقطية
         elif line.startswith('* ') or line.startswith('- '):
             clean_text = line.replace('* ', '', 1).replace('- ', '', 1)
             add_markdown_paragraph(doc, clean_text, style='List Bullet')
-        # الفقرات العادية
         else:
             add_markdown_paragraph(doc, line)
             
@@ -228,7 +220,7 @@ st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسر�
 st.divider()
 st.subheader("⚙️ إعدادات الملف (Preferences)")
 
-# 2. الإعدادات (Dropdown)
+# 2. الإعدادات
 doc_type_selection = st.selectbox(
     "نوع المحتوى (Output Format):",
     options=["Lecture / Notes", "Exam / MCQ"],
@@ -236,7 +228,6 @@ doc_type_selection = st.selectbox(
     placeholder="اختار نوع الملف يا دكتور.."
 )
 
-# ظهور التوضيحات تلقائياً
 if doc_type_selection == "Lecture / Notes":
     st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
 elif doc_type_selection == "Exam / MCQ":
@@ -270,14 +261,12 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 if uploaded_file.type in ['image/png', 'image/jpeg', 'image/jpg']:
                     image_bytes = uploaded_file.getvalue()
                     response = model.generate_content([prompt, {"mime_type": uploaded_file.type, "data": image_bytes}])
-                    # حذف علامة الشباك من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                 elif uploaded_file.type == 'application/pdf':
                     temp_filename = f"temp_{uploaded_file.name}"
                     with open(temp_filename, "wb") as f: f.write(uploaded_file.getvalue())
                     uploaded_pdf = genai.upload_file(temp_filename)
                     response = model.generate_content([prompt, uploaded_pdf])
-                    # حذف علامة الشباك من المصدر
                     full_combined_text += f"\n\nSource: {uploaded_file.name}\n" + response.text
                     try: os.remove(temp_filename)
                     except: pass
@@ -288,13 +277,50 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         except Exception as e:
             st.error(f"خطأ تقني: {e}")
 
-# 4. عرض النتائج (تعريب كامل)
+# ---------------------------------------------------------
+# 4. صندوق الملاحظات (تم نقله هنا: بعد الزر وقبل التحميل) 🆕
+# ---------------------------------------------------------
+st.divider()
+st.markdown("""
+<div style="text-align: right; direction: rtl; background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
+    <h4 style="margin:0;">💌 رسالة ودعوة</h4>
+    <p style="font-size: 14px; color: #555; margin-top: 5px;">
+    العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف. لو الأداة فادتك، ادعِ للقائمين عليها بظهر الغيب. ❤️<br>
+    ولو واجهتك مشكلة، ابعتها هنا وهنحلها فوراً بإذن الله.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+with st.form(key='feedback_form'):
+    feedback_text = st.text_area("رسالتك:", placeholder="اكتب دعوتك أو اقتراحك هنا...")
+    submit_feedback = st.form_submit_button(label='إرسال (Send) 📨')
+    
+    if submit_feedback:
+        if feedback_text:
+            if not GOOGLE_SHEET_URL:
+                st.warning("⚠️ خدمة الرسائل غير مفعلة.")
+            else:
+                try:
+                    response = requests.post(GOOGLE_SHEET_URL, json={"feedback": feedback_text})
+                    if response.status_code == 200:
+                        st.success("جزاك الله خيراً! رسالتك وصلت ❤️")
+                    else:
+                        st.error("حدث خطأ في الاتصال.")
+                except Exception as e:
+                    st.error(f"خطأ: {e}")
+        else:
+            st.warning("الرجاء كتابة رسالة أولاً.")
+
+st.divider()
+
+# ---------------------------------------------------------
+# 5. عرض النتائج (يظهر هنا بعد صندوق الملاحظات)
+# ---------------------------------------------------------
 if st.session_state['converted_text']:
-    st.divider()
     docx_file = create_styled_word_doc(st.session_state['converted_text'], user_filename)
     col_download_area, col_info = st.columns([2, 1])
     with col_download_area:
-        st.success("🎉 ملفك جاهز يا دكتور! حمل من هنا:")
+        st.success("🎉 ملفك جاهز يا بطل! حمل من هنا:")
         st.download_button(
             label=f"💾 تحميل ملف الوورد ({user_filename}.docx)",
             data=docx_file.getvalue(),
@@ -302,46 +328,10 @@ if st.session_state['converted_text']:
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True
         )
-    st.divider()
+    
     st.subheader("📝 مراجعة النص (Live Editor)")
     tab1, tab2 = st.tabs(["✍️ تعديل الكلام", "👁️ المعاينة"])
     with tab1:
         edited_text = st.text_area("عدل براحتك هنا:", value=st.session_state['converted_text'], height=500, label_visibility="collapsed")
         if edited_text != st.session_state['converted_text']: st.session_state['converted_text'] = edited_text
     with tab2: st.markdown(st.session_state['converted_text'])
-
-# ---------------------------------------------------------
-# صندوق الملاحظات (الصدقة الجارية)
-# ---------------------------------------------------------
-with st.sidebar:
-    st.header("💌 رسالة ودعوة")
-    st.markdown("""
-    <div style="text-align: right; direction: rtl; font-size: 14px; color: #555;">
-    العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف.
-    <br>
-    لو الأداة فادتك، ادعِ للقائمين عليها بظهر الغيب دعوة حلوة. ❤️
-    <br><br>
-    ولو عندك اقتراح يطور <b>MedMate</b> أو واجهت مشكلة، ابعتها هنا.. إحنا هنا عشان نساعد بعض. 🚀
-    </div>
-    """, unsafe_allow_html=True)
-    
-    with st.form(key='feedback_form'):
-        feedback_text = st.text_area("رسالتك:", placeholder="اكتب دعوتك أو اقتراحك هنا...")
-        submit_feedback = st.form_submit_button(label='إرسال (Send) 📨')
-        
-        if submit_feedback:
-            if feedback_text:
-                if not GOOGLE_SHEET_URL:
-                    st.warning("⚠️ خدمة الرسائل غير مفعلة (تأكد من الرابط السري).")
-                else:
-                    try:
-                        response = requests.post(GOOGLE_SHEET_URL, json={"feedback": feedback_text})
-                        if response.status_code == 200:
-                            st.success("جزاك الله خيراً! رسالتك وصلت ❤️")
-                        else:
-                            st.error("حدث خطأ في الاتصال.")
-                    except Exception as e:
-                        st.error(f"خطأ: {e}")
-            else:
-                st.warning("الرجاء كتابة رسالة أولاً.")
-
