@@ -341,9 +341,9 @@ with col2:
 # ---------------------------------------------------------
 if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
     if not uploaded_files:
-        st.warning("⚠️ ارفع الملفات أولاً.")
+        st.warning("⚠️ الرجاء رفع الملفات أولاً.")
     elif not api_key and "AI" in processing_method:
-        st.error("⚠️ مفتاح API مفقود.")
+        st.error("⚠️ لم يتم العثور على مفتاح API في الإعدادات! يرجى التواصل مع المطور.")
     else:
         status_text = st.empty()
         progress_bar = st.progress(0)
@@ -473,6 +473,7 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
 
 
 
