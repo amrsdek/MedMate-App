@@ -304,6 +304,7 @@ uploaded_files = st.file_uploader(
     type=['png', 'jpg', 'jpeg', 'pdf'],
     accept_multiple_files=True
 )
+st.caption("💡 نصيحة أخوية: عشان الموقع يشتغل بسرعة، يفضل ترفع **10-15 صورة** أو **ملف PDF واحد (لا يزيد عن 50 صفحة)** في المرة الواحدة.")
 
 st.write("---")
 processing_method = st.radio(
@@ -457,5 +458,6 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
 
 
