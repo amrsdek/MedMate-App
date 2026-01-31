@@ -259,7 +259,9 @@ def create_styled_word_doc(text_content, user_title):
 # ---------------------------------------------------------
 st.title("MedMate | رفيقك الذكي في الكلية 🧬")
 st.markdown("""<div style="text-align: right; direction: rtl;">
-<h3>حوّل صور المحاضرات لملفات Word في ثوانٍ! ⚡</h3>
+<h3>حوّل صور المحاضرات لملفات Word في ثوانٍ! ⚡
+من أخ لأخيه.. طورنا MedMate عشان يكون رفيقك في المشوار.
+صور المحاضرة، ارفعها هنا، واستلمها ملف Word منسق وجاهز للمذاكرة فورًا.</h3>
 <small style="color: #666;">* متاح مجاناً لدفعة طب بني سويف.</small>
 </div>""", unsafe_allow_html=True)
 
@@ -269,7 +271,8 @@ st.markdown("""
 <div style="background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
 <h4 style="margin:0;">💌 رسالة ودعوة</h4>
 <p style="font-size: 14px; color: #555; margin-top: 5px;">
-العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف. ادعِ للقائمين عليه بظهر الغيب. ❤️
+العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف. لو الأداة فادتك، ادعِ للقائمين عليها بظهر الغيب ❤️
+ولو واجهتك مشكلة، ابعتها هنا وهنحلها فورًا بإذن الله.
 </p>
 </div>
 """, unsafe_allow_html=True)
@@ -280,9 +283,9 @@ with st.form(key='feedback_form'):
     if submit_feedback and feedback_text and GOOGLE_SHEET_URL:
         try:
             requests.post(GOOGLE_SHEET_URL, json={"feedback": feedback_text}, timeout=10)
-            st.success("وصلت ❤️")
+            st.success("جزاك الله خيرًا! رسالتك وصلت ❤️")
         except:
-            st.error("عذراً، حدث خطأ أثناء الإرسال.")
+            st.error("عذرًا، حدث خطأ أثناء الإرسال. لكن نيتك وصلت.❤️")
 
 st.divider()
 
@@ -447,3 +450,4 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
