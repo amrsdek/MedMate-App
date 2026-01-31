@@ -1,5 +1,6 @@
 streamlit
 google-generativeai
 python-docx
-requests
+Pillow
 easyocr
+numpy
