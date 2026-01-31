@@ -255,24 +255,34 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         # ----------------------------------------------------
         # المسار الأول: نظام OCR العادي (Threaded + Azkar)
         # ----------------------------------------------------
+        # --- تعديل: دالة الـ OCR بدون رسائل ثابتة ---
+        def run_ocr_fallback():
+            # شلنا السطر اللي كان بيثبت الرسالة هنا
+            ocr_text = process_with_standard_ocr(image_files)
+            return ocr_text
+
+        # ----------------------------------------------------
+        # المسار الأول: نظام OCR العادي (Threaded + Azkar)
+        # ----------------------------------------------------
         if "OCR" in processing_method:
-            # 1. نجهز متغير يستقبل النتيجة من الخلفية
+            # 1. نجهز متغير يستقبل النتيجة
             thread_result = {"text": None}
 
-            # 2. دالة صغيرة لتشغيل الـ OCR
+            # 2. دالة التشغيل للخيط
             def process_ocr_thread():
                 thread_result["text"] = run_ocr_fallback()
 
-            # 3. نشغل الـ OCR في خيط منفصل
+            # 3. تشغيل الخيط
             t = threading.Thread(target=process_ocr_thread)
             t.start()
 
-            # 4. طول ما هو شغال.. اعرض الأذكار
+            # 4. حلقة الأذكار (دلوقتي مفيش حاجة هتقاطعها)
             while t.is_alive():
-                status_text.markdown(f"**📄 جاري استخراج النص (OCR).. {random.choice(AZKAR_LIST)}** 📿")
+                current_zikr = random.choice(AZKAR_LIST)
+                status_text.markdown(f"**📄 جاري استخراج النص (OCR).. {current_zikr}** 📿")
                 time.sleep(2.5)
 
-            # 5. لما يخلص.. استلم النتيجة
+            # 5. استلام النتيجة
             t.join()
             
             st.session_state['converted_text'] = thread_result["text"]
@@ -358,5 +368,6 @@ if st.session_state['converted_text']:
         edited = st.text_area("عدل هنا:", value=st.session_state['converted_text'], height=400, label_visibility="collapsed")
         st.session_state['converted_text'] = edited
     with tab2: st.markdown(st.session_state['converted_text'])
+
 
 
