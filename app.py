@@ -32,15 +32,20 @@ st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_ico
 
 st.markdown("""
 <style>
-.stApp { direction: rtl; text-align: right; background-color: #f8f9fa; }
+/* شيلنا لون الخلفية عشان يظبط أوتوماتيك مع وضع الجهاز */
+.stApp { direction: rtl; text-align: right; }
+
 h1, h2, h3, p, div, .stMarkdown, .caption { text-align: right; font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; }
 section[data-testid="stSidebar"] { direction: rtl; text-align: right; }
 .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] { direction: rtl; text-align: right; }
 .stCheckbox { direction: rtl; text-align: right; }
+
+/* ده زرار التحويل، هنسيبه زي ما هو */
 div.stButton > button {
     background-color: #2E86C1; color: white; font-size: 18px; padding: 10px 20px;
     border-radius: 8px; border: none; width: 100%; margin-top: 20px; font-weight: bold;
 }
+
 .stAlert { direction: rtl; text-align: right; font-weight: bold; }
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden !important; height: 0px !important;}
@@ -259,32 +264,31 @@ def create_styled_word_doc(text_content, user_title):
 # ---------------------------------------------------------
 import streamlit as st
 
-# دمجنا العنوان مع الوصف في بلوك واحد عشان نطبق عليهم نفس التنسيق (RTL)
+# شيلنا تحديد اللون الأسود (color: #0e1117) عشان يتلون لوحده حسب الوضع
 st.markdown("""
 <div style="text-align: right; direction: rtl; font-family: sans-serif;">
-    <h1 style="color: #0e1117;">MedMate | رفيقك الذكي في الكلية 🧬</h1>
+    <h1>MedMate | رفيقك الذكي في الكلية 🧬</h1>
     <h3>حوّل صور المحاضرات لملفات Word في ثوانٍ! ⚡</h3>
-    <p style="font-size: 1.1em;">
+    <p style="font-size: 1.1em; opacity: 0.8;">
     من أخ لأخيه.. طورنا MedMate علشان يوفرلك وقت للمذاكرة أو العبادة.<br>
     صور المحاضرة، ارفعها هنا، واستلمها ملف Word منسق وجاهز للمذاكرة فورًا.
     </p>
-    <small style="color: #666;">* متاح مجانًا هدية لطلبة طب بني سويف.</small>
+    <small style="opacity: 0.6;">* متاح مجانًا هدية لطلبة طب بني سويف.</small>
 </div>
 """, unsafe_allow_html=True)
 
 st.divider()
 
-st.markdown("""
-<div style="background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
-<h4 style="margin:0;">💌 رسالة ودعوة</h4>
-<p style="font-size: 14px; color: #555; margin-top: 5px;">
-العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف. لو الأداة فادتك، ادعِ للقائمين عليها بظهر الغيب ❤️
+# استخدمنا st.info بدل HTML يدوي عشان تظبط ألوانها أوتوماتيك مع الوضع الليلي والنهاري
+st.info("""
+**💌 رسالة ودعوة**
+
+العمل ده **صدقة جارية** لدفعة طب بني سويف. لو الأداة فادتك، ادعِ للقائمين عليها بظهر الغيب ❤️
 ولو واجهتك مشكلة، ابعتها هنا وهنحلها فورًا بإذن الله.
-</p>
-</div>
-""", unsafe_allow_html=True)
+""")
 
 with st.form(key='feedback_form'):
+    # ... باقي الكود زي ما هو ...
     feedback_text = st.text_area("رسالتك:", placeholder="اكتب دعوتك أو اقتراحك هنا...")
     submit_feedback = st.form_submit_button(label='إرسال الرسالة 📨')
     if submit_feedback and feedback_text and GOOGLE_SHEET_URL:
@@ -473,6 +477,7 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
 
 
 
