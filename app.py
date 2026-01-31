@@ -14,6 +14,14 @@ import random
 import time
 import threading
 
+# محاولة استيراد مكتبات OCR (تأكد من إضافتها لـ requirements.txt)
+try:
+    import easyocr
+    import numpy as np
+except ImportError:
+    easyocr = None
+    np = None
+
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
 
@@ -71,6 +79,23 @@ def convert_images_to_pdf(image_files):
     images[0].save(pdf_io, format='PDF', save_all=True, append_images=images[1:])
     pdf_io.seek(0)
     return pdf_io
+
+# --- وظيفة OCR التقليدي (بدون AI) ---
+def process_with_standard_ocr(image_files):
+    if easyocr is None: return "⚠️ مكتبة EasyOCR غير مثبتة على السيرفر."
+    # تحميل الموديل (إنجليزي وعربي)
+    reader = easyocr.Reader(['en', 'ar'], gpu=False) 
+    text_result = ""
+    for img_file in image_files:
+        try:
+            image = Image.open(img_file)
+            image_np = np.array(image)
+            result = reader.readtext(image_np, detail=0)
+            text_result += f"\n\n--- محتوى الصورة: {img_file.name} ---\n"
+            text_result += " ".join(result)
+        except Exception as e:
+            text_result += f"\nخطأ في قراءة الملف {img_file.name}: {e}"
+    return text_result
 
 # --- دوال التنسيق (Word Functions) مع تنظيف علامات * ---
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
@@ -179,65 +204,114 @@ if 'converted_text' not in st.session_state: st.session_state['converted_text'] 
 
 # 2. منطقة الرفع والخيارات
 uploaded_files = st.file_uploader("📂 ارفع الصور أو ملفات PDF", type=['png', 'jpg', 'jpeg', 'pdf'], accept_multiple_files=True)
+
+# --- [إضافة جديدة] اختيار نوع المعالجة ---
+st.write("---")
+processing_method = st.radio(
+    "⚙️ اختر طريقة المعالجة:",
+    ["الذكاء الاصطناعي (AI) - تنسيق ممتاز ✨", "نظام OCR العادي - استخراج نص فقط (بدون حدود) 📄"],
+    index=0
+)
+st.write("---")
+
 doc_type_selection = st.selectbox("نوع المحتوى:", options=["Lecture / Notes", "Exam / MCQ"], index=None, placeholder="اختار النوع..")
 col_opt1, col_opt2 = st.columns(2)
 with col_opt1: is_handwritten = st.checkbox("✍️ خط يد؟")
 with col_opt2: user_filename = st.text_input("اسم الملف:", value="MedMate Note")
 
-# 3. زر التحويل (المنطق الموفر للرصيد + الأذكار)
+# 3. زر التحويل (المنطق الموفر للرصيد + الأذكار + الـ Fallback)
 if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
     if not uploaded_files: st.warning("⚠️ ارفع الملفات أولاً.")
     elif not api_key: st.error("⚠️ مفتاح API مفقود.")
     elif doc_type_selection is None: st.error("🛑 اختر نوع المحتوى.")
     else:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-flash-latest')
         status_text = st.empty(); progress_bar = st.progress(0)
-        try:
-            image_files = [f for f in uploaded_files if f.type in ['image/png', 'image/jpeg', 'image/jpg']]
-            pdf_files = [f for f in uploaded_files if f.type == 'application/pdf']
-            final_content = ""
+        
+        # تجهيز الملفات
+        image_files = [f for f in uploaded_files if f.type in ['image/png', 'image/jpeg', 'image/jpg']]
+        pdf_files = [f for f in uploaded_files if f.type == 'application/pdf']
+        final_content = ""
+
+        # --- دالة مساعدة لتشغيل الـ OCR عند الطلب ---
+        def run_ocr_fallback():
+            status_text.markdown("**📄 جاري استخراج النص باستخدام نظام OCR العادي...**")
+            ocr_text = process_with_standard_ocr(image_files)
+            return ocr_text
+
+        # ----------------------------------------------------
+        # المسار الأول: نظام OCR العادي (إذا اختاره المستخدم)
+        # ----------------------------------------------------
+        if "OCR" in processing_method:
+            st.session_state['converted_text'] = run_ocr_fallback()
+            status_text.success("✅ تم استخراج النص بنجاح (OCR)!"); st.balloons()
             
-            # أ- معالجة الصور ككتلة واحدة (PDF واحد = طلب واحد)
-            if image_files:
-                status_text.markdown(f"**📦 جاري دمج {len(image_files)} صور لتوفير الرصيد...**")
-                pdf_data = convert_images_to_pdf(image_files)
-                temp_name = f"merged_{int(time.time())}.pdf"
-                with open(temp_name, "wb") as f: f.write(pdf_data.read())
+        # ----------------------------------------------------
+        # المسار الثاني: الذكاء الاصطناعي (AI)
+        # ----------------------------------------------------
+        else:
+            try:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-flash-latest')
                 
-                thread_result = {"text": None, "error": None}
-                def process():
-                    try:
-                        g_file = genai.upload_file(temp_name)
-                        while g_file.state.name == "PROCESSING": time.sleep(1); g_file = genai.get_file(g_file.name)
-                        response = model.generate_content([get_medical_prompt(doc_type_selection, is_handwritten), g_file])
-                        thread_result["text"] = response.text
-                    except Exception as e: thread_result["error"] = e
-                
-                t = threading.Thread(target=process); t.start()
-                while t.is_alive():
-                    status_text.markdown(f"**⏳ جاري التحليل.. {random.choice(AZKAR_LIST)}** 📿")
-                    time.sleep(2.5)
-                t.join()
-                if thread_result["error"]: raise thread_result["error"]
-                final_content += thread_result["text"]; os.remove(temp_name)
-                progress_bar.progress(0.5 if pdf_files else 1.0)
+                # أ- معالجة الصور ككتلة واحدة (PDF واحد = طلب واحد)
+                if image_files:
+                    status_text.markdown(f"**📦 جاري دمج {len(image_files)} صور لتوفير الرصيد...**")
+                    pdf_data = convert_images_to_pdf(image_files)
+                    temp_name = f"merged_{int(time.time())}.pdf"
+                    with open(temp_name, "wb") as f: f.write(pdf_data.read())
+                    
+                    thread_result = {"text": None, "error": None}
+                    def process():
+                        try:
+                            g_file = genai.upload_file(temp_name)
+                            while g_file.state.name == "PROCESSING": time.sleep(1); g_file = genai.get_file(g_file.name)
+                            response = model.generate_content([get_medical_prompt(doc_type_selection, is_handwritten), g_file])
+                            thread_result["text"] = response.text
+                        except Exception as e: thread_result["error"] = e
+                    
+                    t = threading.Thread(target=process); t.start()
+                    while t.is_alive():
+                        status_text.markdown(f"**⏳ جاري التحليل بالذكاء الاصطناعي.. {random.choice(AZKAR_LIST)}** 📿")
+                        time.sleep(2.5)
+                    t.join()
+                    
+                    if thread_result["error"]: raise thread_result["error"]
+                    final_content += thread_result["text"]; os.remove(temp_name)
+                    progress_bar.progress(0.5 if pdf_files else 1.0)
 
-            # ب- معالجة ملفات PDF المرفوعة
-            for i, pdf in enumerate(pdf_files):
-                status_text.markdown(f"**📑 جاري تحليل {pdf.name}... {random.choice(AZKAR_LIST)}**")
-                temp_pdf = f"temp_{pdf.name}"
-                with open(temp_pdf, "wb") as f: f.write(pdf.getvalue())
-                g_pdf = genai.upload_file(temp_pdf)
-                while g_pdf.state.name == "PROCESSING": time.sleep(1); g_pdf = genai.get_file(g_pdf.name)
-                response = model.generate_content([get_medical_prompt(doc_type_selection, is_handwritten), g_pdf])
-                final_content += f"\n\nSource: {pdf.name}\n" + response.text
-                os.remove(temp_pdf)
-                progress_bar.progress((i + 1) / len(pdf_files))
+                # ب- معالجة ملفات PDF المرفوعة
+                for i, pdf in enumerate(pdf_files):
+                    status_text.markdown(f"**📑 جاري تحليل {pdf.name}... {random.choice(AZKAR_LIST)}**")
+                    temp_pdf = f"temp_{pdf.name}"
+                    with open(temp_pdf, "wb") as f: f.write(pdf.getvalue())
+                    g_pdf = genai.upload_file(temp_pdf)
+                    while g_pdf.state.name == "PROCESSING": time.sleep(1); g_pdf = genai.get_file(g_pdf.name)
+                    response = model.generate_content([get_medical_prompt(doc_type_selection, is_handwritten), g_pdf])
+                    final_content += f"\n\nSource: {pdf.name}\n" + response.text
+                    os.remove(temp_pdf)
+                    progress_bar.progress((i + 1) / len(pdf_files))
 
-            st.session_state['converted_text'] = final_content
-            status_text.success("✅ تم التحويل بنجاح يا بطل!"); st.balloons()
-        except Exception as e: st.error(f"خطأ: {e}")
+                st.session_state['converted_text'] = final_content
+                status_text.success("✅ تم التحويل بنجاح يا بطل!"); st.balloons()
+            
+            # ----------------------------------------------------
+            # معالجة الخطأ الذكي (Fallback عند نفاذ الرصيد)
+            # ----------------------------------------------------
+            except Exception as e:
+                error_msg = str(e)
+                if "429" in error_msg or "quota" in error_msg.lower():
+                    st.error("🛑 عذراً! تم الوصول للحد الأقصى اليومي لاستخدام الذكاء الاصطناعي.")
+                    st.warning("💡 هل تود تجربة **نظام OCR العادي** كحل مؤقت لاستخراج النص الآن؟")
+                    
+                    # زر الإنقاذ الفوري
+                    if st.button("نعم، حول الملف باستخدام OCR العادي 📄"):
+                        with st.spinner("جاري التحويل بنظام OCR..."):
+                            ocr_result = run_ocr_fallback()
+                            st.session_state['converted_text'] = ocr_result
+                            st.success("✅ تم استخراج النص بنجاح (OCR)!")
+                            st.rerun() # إعادة تحميل الصفحة لعرض النتائج
+                else:
+                    st.error(f"خطأ تقني: {e}")
 
 # 4. عرض النتائج
 if st.session_state['converted_text']:
