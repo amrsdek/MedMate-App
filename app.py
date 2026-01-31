@@ -14,13 +14,11 @@ import random
 import time
 import threading
 
-# محاولة استيراد مكتبات OCR (تأكد من إضافتها لـ requirements.txt)
+# محاولة استيراد مكتبة Tesseract (البديل المجاني للأبد)
 try:
-    import easyocr
-    import numpy as np
+    import pytesseract
 except ImportError:
-    easyocr = None
-    np = None
+    pytesseract = None
 
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
@@ -80,26 +78,34 @@ def convert_images_to_pdf(image_files):
     pdf_io.seek(0)
     return pdf_io
 
-# --- [جديد] وظيفة OCR التقليدي (بدون AI) ---
+# --- وظيفة Tesseract OCR (البديل المجاني المحسن) ---
 def process_with_standard_ocr(image_files):
-    if easyocr is None: return "⚠️ مكتبة EasyOCR غير مثبتة على السيرفر."
-    reader = easyocr.Reader(['en', 'ar'], gpu=False) 
+    if pytesseract is None: return "⚠️ مكتبة Tesseract غير مثبتة. تأكد من إضافتها لـ requirements.txt و packages.txt"
+    
     text_result = ""
     for img_file in image_files:
         try:
             image = Image.open(img_file)
-            image_np = np.array(image)
-            result = reader.readtext(image_np, detail=0)
+            # ara+eng لدعم العربي والإنجليزي معاً
+            # Tesseract يحافظ على الأسطر تلقائياً
+            raw_text = pytesseract.image_to_string(image, lang='ara+eng')
+            
+            # تنظيف الأسطر الفارغة الزائدة مع الحفاظ على الفقرات
+            clean_text = "\n".join([line for line in raw_text.split('\n') if line.strip() != ''])
+            
             text_result += f"\n\n--- محتوى الصورة: {img_file.name} ---\n"
-            text_result += " ".join(result)
+            text_result += clean_text
         except Exception as e:
             text_result += f"\nخطأ في قراءة الملف {img_file.name}: {e}"
+            if "tesseract" in str(e).lower():
+                text_result += "\n(تأكد من وجود ملف packages.txt يحتوي على tesseract-ocr-ara)"
     return text_result
 
 # --- دوال التنسيق (Word Functions) مع تنظيف علامات * ---
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
     if hasattr(parent, 'add_paragraph'): p = parent.add_paragraph(style=style)
     else: p = parent 
+    # مسح النجوم المفردة والإبقاء على دبل ستار للبولد فقط
     text = text.replace('***', '**').replace('*', '') 
     if align: p.alignment = align
     else: p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in text) else WD_ALIGN_PARAGRAPH.LEFT
@@ -146,6 +152,7 @@ def create_styled_word_doc(text_content, user_title):
     doc = Document()
     add_page_border(doc)
     style = doc.styles['Normal']; font = style.font; font.name = 'Times New Roman'; font.size = Pt(12)
+    # تنظيف العنوان
     clean_title = user_title.replace('*', '').replace('#', '').strip()
     main_heading = doc.add_heading(clean_title, 0)
     main_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -184,7 +191,7 @@ st.markdown("""<div style="text-align: right; direction: rtl;"><h3>حوّل صو
 
 st.divider()
 
-# 1. صندوق الملاحظات
+# 1. صندوق الملاحظات (متاح دائماً)
 st.markdown("""<div style="background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
 <h4 style="margin:0;">💌 رسالة ودعوة</h4>
 <p style="font-size: 14px; color: #555; margin-top: 5px;">العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف. ادعِ للقائمين عليه بظهر الغيب. ❤️</p>
@@ -199,25 +206,24 @@ with st.form(key='feedback_form'):
 st.divider()
 if 'converted_text' not in st.session_state: st.session_state['converted_text'] = ""
 
-# 2. منطقة الرفع
+# 2. منطقة الرفع والخيارات
 uploaded_files = st.file_uploader("📂 ارفع الصور أو ملفات PDF", type=['png', 'jpg', 'jpeg', 'pdf'], accept_multiple_files=True)
 
-# --- [التعديل الجديد: إضافة خيار التبديل هنا] ---
+# --- [إضافة جديدة] اختيار نوع المعالجة ---
 st.write("---")
 processing_method = st.radio(
     "⚙️ اختر طريقة المعالجة:",
-    ["الذكاء الاصطناعي (AI) - تنسيق ممتاز ✨", "نظام OCR العادي - استخراج نص فقط (بدون حدود) 📄"],
+    ["الذكاء الاصطناعي (AI) - تنسيق ممتاز ✨", "نظام OCR العادي - Tesseract (مجاني بلا حدود) 📄"],
     index=0
 )
 st.write("---")
-# -------------------------------------------------
 
 doc_type_selection = st.selectbox("نوع المحتوى:", options=["Lecture / Notes", "Exam / MCQ"], index=None, placeholder="اختار النوع..")
 col_opt1, col_opt2 = st.columns(2)
 with col_opt1: is_handwritten = st.checkbox("✍️ خط يد؟")
 with col_opt2: user_filename = st.text_input("اسم الملف:", value="MedMate Note")
 
-# 3. زر التحويل (مع منطق التبديل الجديد)
+# 3. زر التحويل (المنطق الموفر للرصيد + الأذكار + الـ Fallback)
 if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
     if not uploaded_files: st.warning("⚠️ ارفع الملفات أولاً.")
     elif not api_key: st.error("⚠️ مفتاح API مفقود.")
@@ -230,27 +236,28 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         pdf_files = [f for f in uploaded_files if f.type == 'application/pdf']
         final_content = ""
 
-        # دالة تشغيل OCR عند الطلب
+        # --- دالة مساعدة لتشغيل الـ OCR عند الطلب ---
         def run_ocr_fallback():
-            status_text.markdown("**📄 جاري استخراج النص باستخدام نظام OCR العادي...**")
-            return process_with_standard_ocr(image_files)
+            status_text.markdown("**📄 جاري استخراج النص باستخدام نظام Tesseract OCR...**")
+            ocr_text = process_with_standard_ocr(image_files)
+            return ocr_text
 
-        # ---------------------------------------
-        # المسار الأول: إذا اختار المستخدم OCR
-        # ---------------------------------------
+        # ----------------------------------------------------
+        # المسار الأول: نظام OCR العادي (إذا اختاره المستخدم)
+        # ----------------------------------------------------
         if "OCR" in processing_method:
             st.session_state['converted_text'] = run_ocr_fallback()
             status_text.success("✅ تم استخراج النص بنجاح (OCR)!"); st.balloons()
             
-        # ---------------------------------------
+        # ----------------------------------------------------
         # المسار الثاني: الذكاء الاصطناعي (AI)
-        # ---------------------------------------
+        # ----------------------------------------------------
         else:
             try:
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel('gemini-flash-latest')
                 
-                # أ- معالجة الصور (مدمجة)
+                # أ- معالجة الصور ككتلة واحدة (PDF واحد = طلب واحد)
                 if image_files:
                     status_text.markdown(f"**📦 جاري دمج {len(image_files)} صور لتوفير الرصيد...**")
                     pdf_data = convert_images_to_pdf(image_files)
@@ -276,7 +283,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                     final_content += thread_result["text"]; os.remove(temp_name)
                     progress_bar.progress(0.5 if pdf_files else 1.0)
 
-                # ب- معالجة PDF
+                # ب- معالجة ملفات PDF المرفوعة
                 for i, pdf in enumerate(pdf_files):
                     status_text.markdown(f"**📑 جاري تحليل {pdf.name}... {random.choice(AZKAR_LIST)}**")
                     temp_pdf = f"temp_{pdf.name}"
@@ -291,19 +298,22 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 st.session_state['converted_text'] = final_content
                 status_text.success("✅ تم التحويل بنجاح يا بطل!"); st.balloons()
             
-            # --- [التعديل الجديد: معالجة أخطاء الرصيد] ---
+            # ----------------------------------------------------
+            # معالجة الخطأ الذكي (Fallback عند نفاذ الرصيد)
+            # ----------------------------------------------------
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower():
                     st.error("🛑 عذراً! تم الوصول للحد الأقصى اليومي لاستخدام الذكاء الاصطناعي.")
-                    st.warning("💡 هل تود تجربة **نظام OCR العادي** كحل مؤقت لاستخراج النص الآن؟")
+                    st.warning("💡 هل تود تجربة **نظام Tesseract OCR** كحل مؤقت لاستخراج النص الآن؟")
                     
+                    # زر الإنقاذ الفوري
                     if st.button("نعم، حول الملف باستخدام OCR العادي 📄"):
-                        with st.spinner("جاري التحويل بنظام OCR..."):
+                        with st.spinner("جاري التحويل بنظام Tesseract..."):
                             ocr_result = run_ocr_fallback()
                             st.session_state['converted_text'] = ocr_result
                             st.success("✅ تم استخراج النص بنجاح (OCR)!")
-                            st.rerun()
+                            st.rerun() # إعادة تحميل الصفحة لعرض النتائج
                 else:
                     st.error(f"خطأ تقني: {e}")
 
