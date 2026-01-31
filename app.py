@@ -243,21 +243,9 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         pdf_files = [f for f in uploaded_files if f.type == 'application/pdf']
         final_content = ""
 
-        # --- دالة مساعدة لتشغيل الـ OCR عند الطلب ---
+        # --- دالة مساعدة لتشغيل الـ OCR (تم تنظيفها من الرسائل الثابتة) ---
         def run_ocr_fallback():
-            status_text.markdown("**📄 جاري استخراج النص باستخدام نظام Tesseract OCR...**")
-            ocr_text = process_with_standard_ocr(image_files)
-            return ocr_text
-
-        # ----------------------------------------------------
-        # المسار الأول: نظام OCR العادي (إذا اختاره المستخدم)
-        # ----------------------------------------------------
-        # ----------------------------------------------------
-        # المسار الأول: نظام OCR العادي (Threaded + Azkar)
-        # ----------------------------------------------------
-        # --- تعديل: دالة الـ OCR بدون رسائل ثابتة ---
-        def run_ocr_fallback():
-            # شلنا السطر اللي كان بيثبت الرسالة هنا
+            # لاحظ: شلنا السطر اللي كان بيطبع رسالة هنا عشان ميعطلش الأذكار
             ocr_text = process_with_standard_ocr(image_files)
             return ocr_text
 
@@ -265,10 +253,10 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         # المسار الأول: نظام OCR العادي (Threaded + Azkar)
         # ----------------------------------------------------
         if "OCR" in processing_method:
-            # 1. نجهز متغير يستقبل النتيجة
+            # 1. متغير لاستقبال النتيجة من الخيط الخلفي
             thread_result = {"text": None}
 
-            # 2. دالة التشغيل للخيط
+            # 2. دالة التشغيل
             def process_ocr_thread():
                 thread_result["text"] = run_ocr_fallback()
 
@@ -276,7 +264,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
             t = threading.Thread(target=process_ocr_thread)
             t.start()
 
-            # 4. حلقة الأذكار (دلوقتي مفيش حاجة هتقاطعها)
+            # 4. حلقة الأذكار (الوحيدة اللي هتكتب على الشاشة دلوقتي)
             while t.is_alive():
                 current_zikr = random.choice(AZKAR_LIST)
                 status_text.markdown(f"**📄 جاري استخراج النص (OCR).. {current_zikr}** 📿")
@@ -337,22 +325,29 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 st.session_state['converted_text'] = final_content
                 status_text.success("✅ تم التحويل بنجاح يا بطل!"); st.balloons()
             
-            # ----------------------------------------------------
-            # معالجة الخطأ الذكي (Fallback عند نفاذ الرصيد)
-            # ----------------------------------------------------
+            # معالجة الخطأ الذكي (Fallback)
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower():
                     st.error("🛑 عذراً! تم الوصول للحد الأقصى اليومي لاستخدام الذكاء الاصطناعي.")
-                    st.warning("💡 هل تود تجربة **نظام Tesseract OCR** كحل مؤقت لاستخراج النص الآن؟")
+                    st.warning("💡 هل تود تجربة **نظام OCR العادي** كحل مؤقت لاستخراج النص الآن؟")
                     
-                    # زر الإنقاذ الفوري
                     if st.button("نعم، حول الملف باستخدام OCR العادي 📄"):
-                        with st.spinner("جاري التحويل بنظام Tesseract..."):
-                            ocr_result = run_ocr_fallback()
-                            st.session_state['converted_text'] = ocr_result
-                            st.success("✅ تم استخراج النص بنجاح (OCR)!")
-                            st.rerun() # إعادة تحميل الصفحة لعرض النتائج
+                        # هنا برضه لازم نشغل الأذكار بنفس الطريقة
+                        thread_result = {"text": None}
+                        def process_ocr_rescue():
+                             thread_result["text"] = run_ocr_fallback()
+                        
+                        t = threading.Thread(target=process_ocr_rescue)
+                        t.start()
+                        while t.is_alive():
+                             status_text.markdown(f"**📄 جاري الإنقاذ (OCR).. {random.choice(AZKAR_LIST)}** 📿")
+                             time.sleep(2.5)
+                        t.join()
+
+                        st.session_state['converted_text'] = thread_result["text"]
+                        st.success("✅ تم استخراج النص بنجاح (OCR)!")
+                        st.rerun()
                 else:
                     st.error(f"خطأ تقني: {e}")
 
@@ -368,6 +363,7 @@ if st.session_state['converted_text']:
         edited = st.text_area("عدل هنا:", value=st.session_state['converted_text'], height=400, label_visibility="collapsed")
         st.session_state['converted_text'] = edited
     with tab2: st.markdown(st.session_state['converted_text'])
+
 
 
 
