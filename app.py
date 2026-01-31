@@ -332,7 +332,7 @@ col1, col2 = st.columns(2)
 
 # مثال إزاي تملى الأعمدة صح للعربي
 with col1:
-    is_handwritten = st.checkbox("✍️ خط يد؟")
+    is_handwritten = st.checkbox("✍️ هل الملف يحتوى نصوص بخط اليد؟")
 with col2:
     user_filename = st.text_input("اسم الملف:", value="MedMate Note")
 
@@ -433,7 +433,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                         os.remove(temp_pdf)
 
                 st.session_state['converted_text'] = final_content
-                status_text.success("✅ تم التحويل بنجاح يا بطل!")
+                status_text.success("✅ تم التحويل بنجاح يا دكتور!")
                 st.balloons()
 
             # ---- Fallback تلقائي للـ OCR عند نفاذ الرصيد ----
@@ -441,7 +441,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 error_msg = str(e).lower()
                 if "429" in error_msg or "quota" in error_msg:
                     st.error("🛑 تم الوصول للحد الأقصى اليومي لاستخدام الذكاء الاصطناعي.")
-                    if st.button("اضغط هنا للتحويل باستخدام OCR فوراً 📄"):
+                    if st.button("اضغط هنا للتحويل باستخدام OCR فورًا 📄"):
                         try:
                             final_content = process_with_standard_ocr(uploaded_files, status_text)
                             st.session_state['converted_text'] = final_content
@@ -457,7 +457,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
 if st.session_state['converted_text']:
     st.divider()
     docx_file = create_styled_word_doc(st.session_state['converted_text'], user_filename)
-    st.success("🎉 ملفك جاهز!")
+    st.success("🎉 اتفضل يا دكتور، ملفك جاهز!")
     st.download_button(
         label=f"💾 تحميل ملف الوورد ({user_filename}.docx)",
         data=docx_file.getvalue(),
@@ -473,6 +473,7 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
 
 
 
