@@ -2,7 +2,4 @@ streamlit
 google-generativeai
 python-docx
 Pillow
-easyocr
-numpy
 pytesseract
-pdf2image
