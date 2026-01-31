@@ -3,3 +3,5 @@ google-generativeai
 python-docx
 Pillow
 pytesseract
+pdf2image
+requests
