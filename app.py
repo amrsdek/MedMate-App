@@ -12,20 +12,24 @@ import os
 import requests
 import random
 import time
-import threading
+import tempfile
 
-# محاولة استيراد مكتبة Tesseract (البديل المجاني للأبد)
+# OCR
 try:
     import pytesseract
 except ImportError:
     pytesseract = None
 
-# 1. إعدادات الصفحة
-st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
+try:
+    from pdf2image import convert_from_bytes
+except ImportError:
+    convert_from_bytes = None
 
 # ---------------------------------------------------------
-# CSS للمظهر (RTL + إخفاء كامل لعلامات Streamlit)
+# إعداد الصفحة
 # ---------------------------------------------------------
+st.set_page_config(page_title="MedMate | رفيقك في الكلية", page_icon="🧬", layout="centered")
+
 st.markdown("""
 <style>
 .stApp { direction: rtl; text-align: right; background-color: #f8f9fa; }
@@ -38,7 +42,6 @@ div.stButton > button {
     border-radius: 8px; border: none; width: 100%; margin-top: 20px; font-weight: bold;
 }
 .stAlert { direction: rtl; text-align: right; font-weight: bold; }
-/* 🚫 منطقة الإخفاء القسري (Clean UI) */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden !important; height: 0px !important;}
 header {visibility: hidden !important;}
@@ -49,15 +52,26 @@ div[class*="viewerBadge"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
-# قائمة الأذكار
+# ---------------------------------------------------------
+# أذكار
+# ---------------------------------------------------------
 AZKAR_LIST = [
-    "سبحان الله وبحمده، سبحان الله العظيم 🌿", "اللهم صل وسلم وبارك على نبينا محمد ﷺ",
-    "لا حول ولا قوة إلا بالله العلي العظيم", "أستغفر الله العظيم وأتوب إليه",
-    "سبحان الله، والحمد لله، ولا إله إلا الله، والله أكبر", "اللهم إنك عفو كريم تحب العفو فاعف عنا",
-    "يا حي يا قيوم برحمتك أستغيث", "ربّ اشرح لي صدري ويسّر لي أمري"
+    "سبحان الله وبحمده، سبحان الله العظيم 🌿",
+    "اللهم صل وسلم وبارك على نبينا محمد ﷺ",
+    "لا حول ولا قوة إلا بالله العلي العظيم",
+    "أستغفر الله العظيم وأتوب إليه",
+    "سبحان الله، والحمد لله، ولا إله إلا الله، والله أكبر",
+    "اللهم إنك عفو كريم تحب العفو فاعف عنا",
+    "يا حي يا قيوم برحمتك أستغيث",
+    "ربّ اشرح لي صدري ويسّر لي أمري"
 ]
 
-# إعدادات الأمان
+def zikr_update(box, prefix="⏳ جاري المعالجة"):
+    box.markdown(f"**{prefix}.. {random.choice(AZKAR_LIST)}** 📿")
+
+# ---------------------------------------------------------
+# مفاتيح وأمان
+# ---------------------------------------------------------
 try:
     GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
     api_key = st.secrets["GEMINI_API_KEY"]
@@ -65,61 +79,76 @@ except:
     GOOGLE_SHEET_URL = ""
     api_key = None
 
-# --- وظيفة تحويل الصور لـ PDF لتوفير الرصيد (RPD Saver) ---
+# ---------------------------------------------------------
+# أدوات مساعدة
+# ---------------------------------------------------------
 def convert_images_to_pdf(image_files):
     images = []
     for file in image_files:
         img = Image.open(file)
-        if img.mode != 'RGB': img = img.convert('RGB')
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
         images.append(img)
-    if not images: return None
+    if not images:
+        return None
     pdf_io = io.BytesIO()
     images[0].save(pdf_io, format='PDF', save_all=True, append_images=images[1:])
     pdf_io.seek(0)
     return pdf_io
 
-# --- وظيفة Tesseract OCR (نسخة محسنة للتنسيق) ---
-def process_with_standard_ocr(image_files):
-    if pytesseract is None: return "⚠️ مكتبة Tesseract غير مثبتة."
-    
-    text_result = ""
-    for img_file in image_files:
-        try:
-            image = Image.open(img_file)
-            # psm 3: وضع التعرف التلقائي على الفقرات
-            raw_text = pytesseract.image_to_string(image, lang='ara+eng', config='--psm 3')
-            
-            # --- [التنسيق] ---
-            # تقسيم النص لسطور وإضافة فواصل للفقرات
-            formatted_text = ""
-            lines = raw_text.split('\n')
-            for line in lines:
-                clean_line = line.strip()
-                if clean_line:
-                    formatted_text += clean_line + "\n\n"
-            
-            text_result += f"\n\n--- محتوى الصورة: {img_file.name} ---\n"
-            text_result += formatted_text
-            
-        except Exception as e:
-            text_result += f"\nخطأ في قراءة الملف {img_file.name}: {e}"
-            if "tesseract" in str(e).lower():
-                text_result += "\n(تأكد من وجود ملف packages.txt)"
-    return text_result
+# ---------------------------------------------------------
+# OCR
+# ---------------------------------------------------------
+def ocr_image(image):
+    if pytesseract is None:
+        raise RuntimeError("pytesseract غير مثبت.")
+    return pytesseract.image_to_string(image, lang='ara+eng', config='--psm 3')
 
-# --- دوال التنسيق (Word Functions) مع تنظيف علامات * ---
+def process_with_standard_ocr(files, status_box):
+    result_text = ""
+
+    for i, f in enumerate(files):
+        zikr_update(status_box, "📄 جاري استخراج النص (OCR)")
+        time.sleep(0.8)
+
+        if f.type == "application/pdf":
+            if convert_from_bytes is None:
+                result_text += "\n⚠️ pdf2image غير مثبت لمعالجة PDF.\n"
+                continue
+            pages = convert_from_bytes(f.getvalue())
+            for idx, page in enumerate(pages):
+                zikr_update(status_box, f"📄 OCR صفحة {idx+1}")
+                text = ocr_image(page)
+                result_text += f"\n\n--- صفحة {idx+1} من {f.name} ---\n{text}"
+        else:
+            img = Image.open(f)
+            text = ocr_image(img)
+            result_text += f"\n\n--- محتوى الصورة: {f.name} ---\n{text}"
+
+    return result_text
+
+# ---------------------------------------------------------
+# Word Formatting
+# ---------------------------------------------------------
 def add_markdown_paragraph(parent, text, style='Normal', align=None):
-    if hasattr(parent, 'add_paragraph'): p = parent.add_paragraph(style=style)
-    else: p = parent 
-    # مسح النجوم المفردة والإبقاء على دبل ستار للبولد فقط
-    text = text.replace('***', '**').replace('*', '') 
-    if align: p.alignment = align
-    else: p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in text) else WD_ALIGN_PARAGRAPH.LEFT
+    if hasattr(parent, 'add_paragraph'):
+        p = parent.add_paragraph(style=style)
+    else:
+        p = parent
+
+    text = text.replace('***', '**')  # نسيب bold فقط
+    if align:
+        p.alignment = align
+    else:
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in text) else WD_ALIGN_PARAGRAPH.LEFT
+
     parts = text.split('**')
     for i, part in enumerate(parts):
-        if not part: continue
+        if not part:
+            continue
         run = p.add_run(part)
-        run.font.name = 'Times New Roman'; run.font.size = Pt(12)
+        run.font.name = 'Times New Roman'
+        run.font.size = Pt(12)
         run.font.bold = True if i % 2 == 1 else False
     return p
 
@@ -129,91 +158,142 @@ def add_page_border(doc):
     pg_borders.set(qn('w:offsetFrom'), 'page')
     for border_name in ('top', 'left', 'bottom', 'right'):
         border = OxmlElement(f'w:{border_name}')
-        border.set(qn('w:val'), 'single'); border.set(qn('w:sz'), '12'); border.set(qn('w:space'), '24'); border.set(qn('w:color'), 'auto')
+        border.set(qn('w:val'), 'single')
+        border.set(qn('w:sz'), '12')
+        border.set(qn('w:space'), '24')
+        border.set(qn('w:color'), 'auto')
         pg_borders.append(border)
     sec_pr.append(pg_borders)
 
 def create_word_table(doc, table_lines):
-    if not table_lines: return
+    if not table_lines:
+        return
     cleaned_rows = []
     for line in table_lines:
-        if '---' in line: continue
+        if '---' in line:
+            continue
         cells = [c.strip() for c in line.strip('|').split('|')]
         cleaned_rows.append(cells)
-    if not cleaned_rows: return
+
+    if not cleaned_rows:
+        return
+
     table = doc.add_table(rows=len(cleaned_rows), cols=len(cleaned_rows[0]))
     table.style = 'Table Grid'
+
     for r_idx, row_data in enumerate(cleaned_rows):
         row = table.rows[r_idx]
         for c_idx, cell_text in enumerate(row_data):
             if c_idx < len(row.cells):
-                cell = row.cells[c_idx]; cell.text = "" 
+                cell = row.cells[c_idx]
+                cell.text = ""
                 p = cell.paragraphs[0]
-                add_markdown_paragraph(p, cell_text, align=WD_ALIGN_PARAGRAPH.CENTER if r_idx==0 else None)
-                if r_idx == 0: 
-                    for run in p.runs: run.font.bold = True
+                add_markdown_paragraph(p, cell_text,
+                                       align=WD_ALIGN_PARAGRAPH.CENTER if r_idx == 0 else None)
+                if r_idx == 0:
+                    for run in p.runs:
+                        run.font.bold = True
     doc.add_paragraph("")
 
 def create_styled_word_doc(text_content, user_title):
     doc = Document()
     add_page_border(doc)
-    style = doc.styles['Normal']; font = style.font; font.name = 'Times New Roman'; font.size = Pt(12)
-    # تنظيف العنوان
+
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Times New Roman'
+    font.size = Pt(12)
+
     clean_title = user_title.replace('*', '').replace('#', '').strip()
     main_heading = doc.add_heading(clean_title, 0)
     main_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for run in main_heading.runs:
-        run.font.name = 'Times New Roman'; run.font.size = Pt(16); run.font.bold = True; run.font.color.rgb = RGBColor(0, 0, 0)
+        run.font.name = 'Times New Roman'
+        run.font.size = Pt(16)
+        run.font.bold = True
+        run.font.color.rgb = RGBColor(0, 0, 0)
+
     lines = text_content.split('\n')
     table_buffer = []
+
     for line in lines:
         line = line.strip()
         if line.startswith('|') and line.endswith('|'):
-            table_buffer.append(line); continue
+            table_buffer.append(line)
+            continue
         else:
-            if table_buffer: create_word_table(doc, table_buffer); table_buffer = []
-        if not line: continue
+            if table_buffer:
+                create_word_table(doc, table_buffer)
+                table_buffer = []
+
+        if not line:
+            continue
+
         if line.startswith('#'):
             clean_text = line.lstrip('#').replace('*', '').strip()
             h = doc.add_heading(clean_text, level=1)
             h.alignment = WD_ALIGN_PARAGRAPH.RIGHT if any("\u0600" <= c <= "\u06FF" for c in line) else WD_ALIGN_PARAGRAPH.LEFT
             for run in h.runs:
-                run.font.name = 'Times New Roman'; run.font.size = Pt(14); run.font.bold = True; run.font.color.rgb = RGBColor(0, 0, 0)
+                run.font.name = 'Times New Roman'
+                run.font.size = Pt(14)
+                run.font.bold = True
+                run.font.color.rgb = RGBColor(0, 0, 0)
+
         elif line.startswith('* ') or line.startswith('- '):
-            clean_text = line.lstrip('* ').lstrip('- ').replace('*', '').strip()
+            clean_text = line.lstrip('* ').lstrip('- ').strip()
             add_markdown_paragraph(doc, clean_text, style='List Bullet')
+
         else:
             add_markdown_paragraph(doc, line)
-    if table_buffer: create_word_table(doc, table_buffer)
-    bio = io.BytesIO(); doc.save(bio)
+
+    if table_buffer:
+        create_word_table(doc, table_buffer)
+
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
     return bio
 
 # ---------------------------------------------------------
-# الواجهة الرئيسية (UI)
+# UI
 # ---------------------------------------------------------
-st.title("MedMate | رفيقك الذكي في الكلية 🧬") 
-st.markdown("""<div style="text-align: right; direction: rtl;"><h3>حوّل صور المحاضرات لملفات Word في ثوانٍ! ⚡</h3>
-<small style="color: #666;">* متاح مجاناً لدفعة طب بني سويف.</small></div>""", unsafe_allow_html=True)
+st.title("MedMate | رفيقك الذكي في الكلية 🧬")
+st.markdown("""<div style="text-align: right; direction: rtl;">
+<h3>حوّل صور المحاضرات لملفات Word في ثوانٍ! ⚡</h3>
+<small style="color: #666;">* متاح مجاناً لدفعة طب بني سويف.</small>
+</div>""", unsafe_allow_html=True)
 
 st.divider()
 
-# 1. صندوق الملاحظات
-st.markdown("""<div style="background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
+st.markdown("""
+<div style="background-color: #e8f4fd; padding: 15px; border-radius: 10px; border: 1px solid #2E86C1;">
 <h4 style="margin:0;">💌 رسالة ودعوة</h4>
-<p style="font-size: 14px; color: #555; margin-top: 5px;">العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف. ادعِ للقائمين عليه بظهر الغيب. ❤️</p>
-</div>""", unsafe_allow_html=True)
+<p style="font-size: 14px; color: #555; margin-top: 5px;">
+العمل ده <b>صدقة جارية</b> لدفعة طب بني سويف. ادعِ للقائمين عليه بظهر الغيب. ❤️
+</p>
+</div>
+""", unsafe_allow_html=True)
+
 with st.form(key='feedback_form'):
     feedback_text = st.text_area("رسالتك:", placeholder="اكتب دعوتك أو اقتراحك هنا...")
     submit_feedback = st.form_submit_button(label='إرسال الرسالة 📨')
     if submit_feedback and feedback_text and GOOGLE_SHEET_URL:
-        try: requests.post(GOOGLE_SHEET_URL, json={"feedback": feedback_text}); st.success("وصلت ❤️")
-        except: st.error("عذراً، حدث خطأ.")
+        try:
+            requests.post(GOOGLE_SHEET_URL, json={"feedback": feedback_text}, timeout=10)
+            st.success("وصلت ❤️")
+        except:
+            st.error("عذراً، حدث خطأ أثناء الإرسال.")
 
 st.divider()
-if 'converted_text' not in st.session_state: st.session_state['converted_text'] = ""
 
-# 2. منطقة الرفع والخيارات
-uploaded_files = st.file_uploader("📂 ارفع الصور أو ملفات PDF", type=['png', 'jpg', 'jpeg', 'pdf'], accept_multiple_files=True)
+if 'converted_text' not in st.session_state:
+    st.session_state['converted_text'] = ""
+
+uploaded_files = st.file_uploader(
+    "📂 ارفع الصور أو ملفات PDF",
+    type=['png', 'jpg', 'jpeg', 'pdf'],
+    accept_multiple_files=True
+)
 
 st.write("---")
 processing_method = st.radio(
@@ -223,131 +303,147 @@ processing_method = st.radio(
 )
 st.write("---")
 
-doc_type_selection = st.selectbox("نوع المحتوى:", options=["Lecture / Notes", "Exam / MCQ"], index=None, placeholder="اختار النوع..")
-col_opt1, col_opt2 = st.columns(2)
-with col_opt1: is_handwritten = st.checkbox("✍️ خط يد؟")
-with col_opt2: user_filename = st.text_input("اسم الملف:", value="MedMate Note")
+doc_type_selection = st.selectbox("نوع المحتوى:", options=["Lecture / Notes", "Exam / MCQ"], index=0)
+col1, col2 = st.columns(2)
+with col1:
+    is_handwritten = st.checkbox("✍️ خط يد؟")
+with col2:
+    user_filename = st.text_input("اسم الملف:", value="MedMate Note")
 
-# 3. زر التحويل (منطق موحد: Loading + Azkar للجميع)
+# ---------------------------------------------------------
+# زر التنفيذ
+# ---------------------------------------------------------
 if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
-    if not uploaded_files: st.warning("⚠️ ارفع الملفات أولاً.")
-    elif not api_key: st.error("⚠️ مفتاح API مفقود.")
-    elif doc_type_selection is None: st.error("🛑 اختر نوع المحتوى.")
+    if not uploaded_files:
+        st.warning("⚠️ ارفع الملفات أولاً.")
+    elif not api_key and "AI" in processing_method:
+        st.error("⚠️ مفتاح API مفقود.")
     else:
-        status_text = st.empty(); progress_bar = st.progress(0)
-        
-        image_files = [f for f in uploaded_files if f.type in ['image/png', 'image/jpeg', 'image/jpg']]
-        pdf_files = [f for f in uploaded_files if f.type == 'application/pdf']
+        status_text = st.empty()
+        progress_bar = st.progress(0)
+
+        image_files = [f for f in uploaded_files if f.type.startswith("image/")]
+        pdf_files = [f for f in uploaded_files if f.type == "application/pdf"]
         final_content = ""
 
-        # ----------------------------------------------------
-        # المسار الأول: نظام Tesseract OCR
-        # ----------------------------------------------------
+        # -------------------------------------------------
+        # مسار OCR
+        # -------------------------------------------------
         if "OCR" in processing_method:
-            thread_result = {"text": None}
+            try:
+                final_content = process_with_standard_ocr(uploaded_files, status_text)
+                st.session_state['converted_text'] = final_content
+                status_text.success("✅ تم استخراج النص بنجاح (OCR)!")
+                st.balloons()
+            except Exception as e:
+                st.error(f"خطأ أثناء OCR: {e}")
 
-            # دالة التشغيل في الخلفية
-            def process_ocr_thread():
-                # استدعاء مباشر لدالة المعالجة دون أي طباعة
-                thread_result["text"] = process_with_standard_ocr(image_files)
-
-            # تشغيل الخيط
-            t = threading.Thread(target=process_ocr_thread)
-            t.start()
-
-            # حلقة الأذكار (تظهر وتتحرك الآن)
-            while t.is_alive():
-                current_zikr = random.choice(AZKAR_LIST)
-                status_text.markdown(f"**📄 جاري استخراج النص (OCR).. {current_zikr}** 📿")
-                time.sleep(2.5)
-
-            t.join()
-            st.session_state['converted_text'] = thread_result["text"]
-            status_text.success("✅ تم استخراج النص بنجاح (OCR)!"); st.balloons()
-
-        # ----------------------------------------------------
-        # المسار الثاني: الذكاء الاصطناعي AI
-        # ----------------------------------------------------
+        # -------------------------------------------------
+        # مسار الذكاء الاصطناعي
+        # -------------------------------------------------
         else:
             try:
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel('gemini-flash-latest')
-                
-                # أ- دمج الصور في PDF
-                if image_files:
-                    status_text.markdown(f"**📦 جاري دمج {len(image_files)} صور...**")
-                    pdf_data = convert_images_to_pdf(image_files)
-                    temp_name = f"merged_{int(time.time())}.pdf"
-                    with open(temp_name, "wb") as f: f.write(pdf_data.read())
-                    
-                    thread_result = {"text": None, "error": None}
-                    def process():
-                        try:
-                            g_file = genai.upload_file(temp_name)
-                            while g_file.state.name == "PROCESSING": time.sleep(1); g_file = genai.get_file(g_file.name)
-                            response = model.generate_content([get_medical_prompt(doc_type_selection, is_handwritten), g_file])
-                            thread_result["text"] = response.text
-                        except Exception as e: thread_result["error"] = e
-                    
-                    t = threading.Thread(target=process); t.start()
-                    
-                    # حلقة الأذكار
-                    while t.is_alive():
-                        status_text.markdown(f"**⏳ جاري التحليل بالذكاء الاصطناعي.. {random.choice(AZKAR_LIST)}** 📿")
-                        time.sleep(2.5)
-                    t.join()
-                    
-                    if thread_result["error"]: raise thread_result["error"]
-                    final_content += thread_result["text"]; os.remove(temp_name)
-                    progress_bar.progress(0.5 if pdf_files else 1.0)
 
-                # ب- معالجة ملفات PDF
+                # ---- دمج الصور في PDF واحد ----
+                if image_files:
+                    zikr_update(status_text, "📦 جاري دمج الصور")
+                    pdf_data = convert_images_to_pdf(image_files)
+                    if not pdf_data:
+                        raise RuntimeError("فشل دمج الصور.")
+
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                        tmp.write(pdf_data.read())
+                        temp_name = tmp.name
+
+                    try:
+                        zikr_update(status_text, "📤 جاري رفع الملف")
+                        g_file = genai.upload_file(temp_name)
+
+                        for _ in range(60):
+                            zikr_update(status_text, "⏳ انتظار معالجة الملف")
+                            time.sleep(2)
+                            g_file = genai.get_file(g_file.name)
+                            if g_file.state.name != "PROCESSING":
+                                break
+                        else:
+                            raise TimeoutError("انتهت مهلة معالجة الملف.")
+
+                        zikr_update(status_text, "🧠 جاري التحليل بالذكاء الاصطناعي")
+                        response = model.generate_content(
+                            [get_medical_prompt(doc_type_selection, is_handwritten), g_file]
+                        )
+                        final_content += response.text
+                        progress_bar.progress(0.5 if pdf_files else 1.0)
+                    finally:
+                        os.remove(temp_name)
+
+                # ---- معالجة ملفات PDF ----
                 for i, pdf in enumerate(pdf_files):
-                    status_text.markdown(f"**📑 جاري تحليل {pdf.name}... {random.choice(AZKAR_LIST)}**")
-                    temp_pdf = f"temp_{pdf.name}"
-                    with open(temp_pdf, "wb") as f: f.write(pdf.getvalue())
-                    g_pdf = genai.upload_file(temp_pdf)
-                    while g_pdf.state.name == "PROCESSING": time.sleep(1); g_pdf = genai.get_file(g_pdf.name)
-                    response = model.generate_content([get_medical_prompt(doc_type_selection, is_handwritten), g_pdf])
-                    final_content += f"\n\nSource: {pdf.name}\n" + response.text
-                    os.remove(temp_pdf)
-                    progress_bar.progress((i + 1) / len(pdf_files))
+                    zikr_update(status_text, f"📑 جاري تحليل {pdf.name}")
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                        tmp.write(pdf.getvalue())
+                        temp_pdf = tmp.name
+
+                    try:
+                        g_pdf = genai.upload_file(temp_pdf)
+                        for _ in range(60):
+                            zikr_update(status_text, "⏳ انتظار معالجة الملف")
+                            time.sleep(2)
+                            g_pdf = genai.get_file(g_pdf.name)
+                            if g_pdf.state.name != "PROCESSING":
+                                break
+                        else:
+                            raise TimeoutError("انتهت مهلة معالجة الملف.")
+
+                        zikr_update(status_text, "🧠 جاري التحليل بالذكاء الاصطناعي")
+                        response = model.generate_content(
+                            [get_medical_prompt(doc_type_selection, is_handwritten), g_pdf]
+                        )
+                        final_content += f"\n\nSource: {pdf.name}\n" + response.text
+                        progress_bar.progress((i + 1) / len(pdf_files))
+                    finally:
+                        os.remove(temp_pdf)
 
                 st.session_state['converted_text'] = final_content
-                status_text.success("✅ تم التحويل بنجاح يا بطل!"); st.balloons()
-            
-            # معالجة الخطأ الذكي (Fallback)
+                status_text.success("✅ تم التحويل بنجاح يا بطل!")
+                st.balloons()
+
+            # ---- Fallback تلقائي للـ OCR عند نفاذ الرصيد ----
             except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg or "quota" in error_msg.lower():
-                    st.error("🛑 عذراً! تم الوصول للحد الأقصى اليومي لاستخدام الذكاء الاصطناعي.")
-                    if st.button("اضغط هنا للتحويل باستخدام (Tesseract OCR) فوراً 📄"):
-                         # تشغيل الإنقاذ مع الأذكار أيضاً
-                         thread_result = {"text": None}
-                         def process_rescue():
-                             thread_result["text"] = process_with_standard_ocr(image_files)
-                         
-                         t = threading.Thread(target=process_rescue)
-                         t.start()
-                         while t.is_alive():
-                             status_text.markdown(f"**📄 جاري الإنقاذ (OCR).. {random.choice(AZKAR_LIST)}** 📿")
-                             time.sleep(2.5)
-                         t.join()
-                         
-                         st.session_state['converted_text'] = thread_result["text"]
-                         st.rerun()
+                error_msg = str(e).lower()
+                if "429" in error_msg or "quota" in error_msg:
+                    st.error("🛑 تم الوصول للحد الأقصى اليومي لاستخدام الذكاء الاصطناعي.")
+                    if st.button("اضغط هنا للتحويل باستخدام OCR فوراً 📄"):
+                        try:
+                            final_content = process_with_standard_ocr(uploaded_files, status_text)
+                            st.session_state['converted_text'] = final_content
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"فشل OCR الاحتياطي: {ex}")
                 else:
                     st.error(f"خطأ تقني: {e}")
 
-# 4. عرض النتائج
+# ---------------------------------------------------------
+# عرض النتائج
+# ---------------------------------------------------------
 if st.session_state['converted_text']:
     st.divider()
     docx_file = create_styled_word_doc(st.session_state['converted_text'], user_filename)
     st.success("🎉 ملفك جاهز!")
-    st.download_button(label=f"💾 تحميل ملف الوورد ({user_filename}.docx)", data=docx_file.getvalue(), file_name=f"{user_filename}.docx", use_container_width=True)
+    st.download_button(
+        label=f"💾 تحميل ملف الوورد ({user_filename}.docx)",
+        data=docx_file.getvalue(),
+        file_name=f"{user_filename}.docx",
+        use_container_width=True
+    )
+
     st.subheader("📝 مراجعة النص")
     tab1, tab2 = st.tabs(["✍️ تعديل", "👁️ معاينة"])
     with tab1:
-        edited = st.text_area("عدل هنا:", value=st.session_state['converted_text'], height=400, label_visibility="collapsed")
+        edited = st.text_area("عدل هنا:", value=st.session_state['converted_text'],
+                              height=400, label_visibility="collapsed")
         st.session_state['converted_text'] = edited
-    with tab2: st.markdown(st.session_state['converted_text'])
+    with tab2:
+        st.markdown(st.session_state['converted_text'])
