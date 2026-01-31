@@ -314,19 +314,8 @@ processing_method = st.radio(
 )
 st.write("---")
 
-# 1. القائمة المنسدلة (خلينا الاختيارات عربي عشان التناسق)
-doc_type_selection = st.selectbox(
-    "اختار نوع الملف يا دكتور:",
-    options=["محاضرات / مذكرات (Notes)", "امتحانات (MCQ / Exam)"],
-    index=0
-)
-
-# 2. رسائل التوضيح (فصلنا الكود سطور عشان يبقى مقروء ليك مستقبلاً)
-if "محاضرات" in doc_type_selection:
-    st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
-elif "امتحانات" in doc_type_selection:
-    st.info("ℹ️ للامتحانات: هيتم التنسيق كأسئلة منفصلة واختيارات دقيقة.")
-    
+doc_type_selection = st.selectbox("اختار نوع الملف يا دكتور:", options=["Lecture / Notes", "Exam / MCQ"], index=0)
+  
 with col1:
     is_handwritten = st.checkbox("✍️ خط يد؟")
 with col2:
@@ -469,6 +458,7 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
 
 
 
