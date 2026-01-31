@@ -229,7 +229,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
     elif doc_type_selection is None: st.error("🛑 اختر نوع المحتوى.")
     else:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         status_text = st.empty()
         try:
             image_files = [f for f in uploaded_files if f.type in ['image/png', 'image/jpeg', 'image/jpg']]
@@ -284,3 +284,4 @@ if st.session_state['converted_text']:
         edited = st.text_area("عدل هنا:", value=st.session_state['converted_text'], height=400, label_visibility="collapsed")
         st.session_state['converted_text'] = edited
     with tab2: st.markdown(st.session_state['converted_text'])
+
