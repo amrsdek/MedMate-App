@@ -78,27 +78,34 @@ def convert_images_to_pdf(image_files):
     pdf_io.seek(0)
     return pdf_io
 
-# --- وظيفة Tesseract OCR (البديل المجاني المحسن) ---
+# --- وظيفة Tesseract OCR (نسخة محسنة للتنسيق) ---
 def process_with_standard_ocr(image_files):
-    if pytesseract is None: return "⚠️ مكتبة Tesseract غير مثبتة. تأكد من إضافتها لـ requirements.txt و packages.txt"
+    if pytesseract is None: return "⚠️ مكتبة Tesseract غير مثبتة."
     
     text_result = ""
     for img_file in image_files:
         try:
             image = Image.open(img_file)
-            # ara+eng لدعم العربي والإنجليزي معاً
-            # Tesseract يحافظ على الأسطر تلقائياً
-            raw_text = pytesseract.image_to_string(image, lang='ara+eng')
+            # psm 3: وضع التعرف التلقائي على الفقرات
+            raw_text = pytesseract.image_to_string(image, lang='ara+eng', config='--psm 3')
             
-            # تنظيف الأسطر الفارغة الزائدة مع الحفاظ على الفقرات
-            clean_text = "\n".join([line for line in raw_text.split('\n') if line.strip() != ''])
+            # --- [التعديل السحري] ---
+            # هنا بنقسم النص لسطور، وبنحط مسافتين (Enter) بعد كل سطر عشان نجبره ينزل سطر جديد
+            formatted_text = ""
+            lines = raw_text.split('\n')
+            for line in lines:
+                clean_line = line.strip()
+                if clean_line:
+                    # إضافة سطرين جدد بعد كل جملة للحفاظ على شكل الفقرات
+                    formatted_text += clean_line + "\n\n"
             
             text_result += f"\n\n--- محتوى الصورة: {img_file.name} ---\n"
-            text_result += clean_text
+            text_result += formatted_text
+            
         except Exception as e:
             text_result += f"\nخطأ في قراءة الملف {img_file.name}: {e}"
             if "tesseract" in str(e).lower():
-                text_result += "\n(تأكد من وجود ملف packages.txt يحتوي على tesseract-ocr-ara)"
+                text_result += "\n(تأكد من وجود ملف packages.txt)"
     return text_result
 
 # --- دوال التنسيق (Word Functions) مع تنظيف علامات * ---
@@ -329,3 +336,4 @@ if st.session_state['converted_text']:
         edited = st.text_area("عدل هنا:", value=st.session_state['converted_text'], height=400, label_visibility="collapsed")
         st.session_state['converted_text'] = edited
     with tab2: st.markdown(st.session_state['converted_text'])
+
