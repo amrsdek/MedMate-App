@@ -326,6 +326,7 @@ if "محاضرات" in doc_type_selection:
     st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.")
 elif "امتحانات" in doc_type_selection:
     st.info("ℹ️ للامتحانات: هيتم التنسيق كأسئلة منفصلة واختيارات دقيقة.")
+    
 with col1:
     is_handwritten = st.checkbox("✍️ خط يد؟")
 with col2:
@@ -468,6 +469,7 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
 
 
 
