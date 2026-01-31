@@ -89,7 +89,8 @@ def process_with_standard_ocr(image_files):
             # psm 3: وضع التعرف التلقائي على الفقرات
             raw_text = pytesseract.image_to_string(image, lang='ara+eng', config='--psm 3')
             
-            # تنسيق الفقرات بإضافة سطرين
+            # --- [التنسيق] ---
+            # تقسيم النص لسطور وإضافة فواصل للفقرات
             formatted_text = ""
             lines = raw_text.split('\n')
             for line in lines:
@@ -214,7 +215,6 @@ if 'converted_text' not in st.session_state: st.session_state['converted_text'] 
 # 2. منطقة الرفع والخيارات
 uploaded_files = st.file_uploader("📂 ارفع الصور أو ملفات PDF", type=['png', 'jpg', 'jpeg', 'pdf'], accept_multiple_files=True)
 
-# خيار المعالجة
 st.write("---")
 processing_method = st.radio(
     "⚙️ اختر طريقة المعالجة:",
@@ -228,7 +228,7 @@ col_opt1, col_opt2 = st.columns(2)
 with col_opt1: is_handwritten = st.checkbox("✍️ خط يد؟")
 with col_opt2: user_filename = st.text_input("اسم الملف:", value="MedMate Note")
 
-# 3. زر التحويل (الأذكار تعمل في الحالتين)
+# 3. زر التحويل (منطق موحد: Loading + Azkar للجميع)
 if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
     if not uploaded_files: st.warning("⚠️ ارفع الملفات أولاً.")
     elif not api_key: st.error("⚠️ مفتاح API مفقود.")
@@ -240,23 +240,22 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
         pdf_files = [f for f in uploaded_files if f.type == 'application/pdf']
         final_content = ""
 
-        # دالة مساعدة لتشغيل OCR (بدون طباعة أي نصوص ثابتة تعطل الأذكار)
-        def run_ocr_fallback():
-            return process_with_standard_ocr(image_files)
-
         # ----------------------------------------------------
-        # المسار الأول: Tesseract OCR (مع الأذكار المتحركة)
+        # المسار الأول: نظام Tesseract OCR
         # ----------------------------------------------------
         if "OCR" in processing_method:
             thread_result = {"text": None}
 
+            # دالة التشغيل في الخلفية
             def process_ocr_thread():
-                thread_result["text"] = run_ocr_fallback()
+                # استدعاء مباشر لدالة المعالجة دون أي طباعة
+                thread_result["text"] = process_with_standard_ocr(image_files)
 
+            # تشغيل الخيط
             t = threading.Thread(target=process_ocr_thread)
             t.start()
 
-            # حلقة الأذكار أثناء عمل الـ OCR
+            # حلقة الأذكار (تظهر وتتحرك الآن)
             while t.is_alive():
                 current_zikr = random.choice(AZKAR_LIST)
                 status_text.markdown(f"**📄 جاري استخراج النص (OCR).. {current_zikr}** 📿")
@@ -267,16 +266,15 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
             status_text.success("✅ تم استخراج النص بنجاح (OCR)!"); st.balloons()
 
         # ----------------------------------------------------
-        # المسار الثاني: الذكاء الاصطناعي AI (مع الأذكار المتحركة)
+        # المسار الثاني: الذكاء الاصطناعي AI
         # ----------------------------------------------------
         else:
             try:
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel('gemini-flash-latest')
                 
-                # أ- دمج الصور في PDF واحد لتوفير الرصيد
+                # أ- دمج الصور في PDF
                 if image_files:
-                    # تنبيه لحظي قبل الدخول في الثريد
                     status_text.markdown(f"**📦 جاري دمج {len(image_files)} صور...**")
                     pdf_data = convert_images_to_pdf(image_files)
                     temp_name = f"merged_{int(time.time())}.pdf"
@@ -293,7 +291,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                     
                     t = threading.Thread(target=process); t.start()
                     
-                    # حلقة الأذكار أثناء عمل الـ AI
+                    # حلقة الأذكار
                     while t.is_alive():
                         status_text.markdown(f"**⏳ جاري التحليل بالذكاء الاصطناعي.. {random.choice(AZKAR_LIST)}** 📿")
                         time.sleep(2.5)
@@ -318,7 +316,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                 st.session_state['converted_text'] = final_content
                 status_text.success("✅ تم التحويل بنجاح يا بطل!"); st.balloons()
             
-            # معالجة الخطأ الذكي (Fallback عند نفاذ الرصيد)
+            # معالجة الخطأ الذكي (Fallback)
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower():
@@ -327,7 +325,7 @@ if st.button("توكلنا على الله.. ابدأ التحويل 🚀"):
                          # تشغيل الإنقاذ مع الأذكار أيضاً
                          thread_result = {"text": None}
                          def process_rescue():
-                             thread_result["text"] = run_ocr_fallback()
+                             thread_result["text"] = process_with_standard_ocr(image_files)
                          
                          t = threading.Thread(target=process_rescue)
                          t.start()
