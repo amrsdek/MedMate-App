@@ -314,7 +314,8 @@ processing_method = st.radio(
 )
 st.write("---")
 
-doc_type_selection = st.selectbox("نوع المحتوى:", options=["Lecture / Notes", "Exam / MCQ"], index=0)
+doc_type_selection = st.selectbox("اختار نوع الملف يا دكتور:", options=["Lecture / Notes", "Exam / MCQ"], index=0)
+if doc_type_selection == "Lecture / Notes": st.info("ℹ️ للمحاضرات والمذكرات: هيتم التنسيق كفقرات وعناوين وشرح متصل.") elif doc_type_selection == "Exam / MCQ": st.info("ℹ️ للامتحانات: هيتم التنسيق كأسئلة منفصلة واختيارات دقيقة.")
 col1, col2 = st.columns(2)
 with col1:
     is_handwritten = st.checkbox("✍️ خط يد؟")
@@ -458,6 +459,7 @@ if st.session_state['converted_text']:
         st.session_state['converted_text'] = edited
     with tab2:
         st.markdown(st.session_state['converted_text'])
+
 
 
 
